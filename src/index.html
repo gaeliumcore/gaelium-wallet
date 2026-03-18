@@ -1,0 +1,1134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none';">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gaelium Wallet</title>
+<style>
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('assets/fonts/jetbrains-mono-400.ttf') format('truetype'); }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('assets/fonts/jetbrains-mono-500.ttf') format('truetype'); }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 300; font-display: swap; src: url('assets/fonts/outfit-300.ttf') format('truetype'); }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 400; font-display: swap; src: url('assets/fonts/outfit-400.ttf') format('truetype'); }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 500; font-display: swap; src: url('assets/fonts/outfit-500.ttf') format('truetype'); }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 600; font-display: swap; src: url('assets/fonts/outfit-600.ttf') format('truetype'); }
+@font-face { font-family: 'Outfit'; font-style: normal; font-weight: 700; font-display: swap; src: url('assets/fonts/outfit-700.ttf') format('truetype'); }
+:root {
+  --bg-primary: #0a0f1a;
+  --bg-secondary: #111827;
+  --bg-card: #1a2236;
+  --bg-card-hover: #1e2a42;
+  --border: rgba(13, 181, 132, 0.12);
+  --border-active: rgba(13, 181, 132, 0.35);
+  --green: #088a63;
+  --green-light: #0db584;
+  --green-glow: rgba(13, 181, 132, 0.15);
+  --green-soft: rgba(13, 181, 132, 0.08);
+  --text-primary: #e8ecf4;
+  --text-secondary: #b0bdd0;
+  --text-muted: #8a96ad;
+  --red: #e74c5e;
+  --red-soft: rgba(231, 76, 94, 0.1);
+  --yellow: #f0b429;
+  --yellow-soft: rgba(240, 180, 41, 0.1);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Outfit', sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  overflow: hidden;
+  height: 100vh;
+  user-select: none;
+}
+.title-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  height: 38px; padding: 0 12px;
+  background: var(--bg-secondary); border-bottom: 1px solid var(--border);
+  -webkit-app-region: drag;
+}
+.title-bar-text { font-size: 12px; color: var(--text-muted); }
+.window-controls { display: flex; gap: 8px; -webkit-app-region: no-drag; }
+.win-btn {
+  width: 46px; height: 30px; border-radius: 0;
+  border: none; cursor: pointer; transition: background 0.15s;
+  background: transparent; color: var(--text-secondary);
+  font-size: 11px; display: flex; align-items: center; justify-content: center;
+}
+.win-btn:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+.win-min {}
+.win-max {}
+.win-close:hover { background: var(--red); color: white; }
+.app-layout { display: flex; height: calc(100vh - 38px - 32px); }
+.sidebar {
+  width: 210px; background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; flex-shrink: 0;
+}
+.sidebar-logo {
+  padding: 22px 18px; display: flex; align-items: center;
+  gap: 11px; border-bottom: 1px solid var(--border);
+}
+.logo-icon {
+  width: 38px; height: 38px;
+  background: linear-gradient(135deg, var(--green), var(--green-light));
+  border-radius: 10px; display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 18px; color: white;
+  box-shadow: 0 4px 12px rgba(8, 138, 99, 0.3);
+}
+.logo-text { font-weight: 600; font-size: 17px; letter-spacing: 0.5px; }
+.logo-version { font-size: 10px; color: var(--text-muted); margin-top: 1px; }
+.sidebar-nav {
+  flex: 1; padding: 12px 10px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 11px;
+  padding: 11px 14px; border-radius: 10px;
+  color: var(--text-secondary); font-size: 13.5px; font-weight: 450;
+  cursor: pointer; transition: all 0.2s; position: relative;
+}
+.nav-item:hover { background: var(--green-soft); color: var(--text-primary); }
+.nav-item.active {
+  background: linear-gradient(135deg, rgba(8,138,99,0.15), rgba(8,138,99,0.08));
+  color: var(--green-light); font-weight: 500;
+}
+.nav-item.active::before {
+  content: ''; position: absolute; left: 0; top: 50%;
+  transform: translateY(-50%); width: 3px; height: 20px;
+  background: var(--green-light); border-radius: 0 3px 3px 0;
+}
+.nav-icon { width: 20px; text-align: center; font-size: 15px; }
+.nav-spacer { flex: 1; }
+.sidebar-footer { padding: 14px 16px; border-top: 1px solid var(--border); }
+.sync-status {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11px; color: var(--text-muted);
+}
+.sync-dot {
+  width: 7px; height: 7px; background: var(--green-light);
+  border-radius: 50%; box-shadow: 0 0 6px var(--green-light);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
+.main-content { flex: 1; overflow-y: auto; padding: 24px; }
+.main-content::-webkit-scrollbar { width: 5px; }
+.main-content::-webkit-scrollbar-track { background: transparent; }
+.main-content::-webkit-scrollbar-thumb { background: var(--border-active); border-radius: 3px; }
+.page { display: none; }
+.page.active { display: block; }
+.page-title { font-size: 21px; font-weight: 600; margin-bottom: 22px; }
+.balance-card {
+  position: relative;
+  background: linear-gradient(135deg, #0c2a3d 0%, #0a1628 40%, #112040 70%, #0d1f35 100%);
+  border-radius: 18px; padding: 28px 30px; overflow: hidden;
+  border: 1px solid rgba(8,138,99,0.2); min-height: 180px;
+  display: flex; flex-direction: column; justify-content: space-between;
+  margin-bottom: 22px;
+}
+.balance-card::before {
+  content: ''; position: absolute; top: -60%; right: -20%;
+  width: 380px; height: 380px;
+  background: radial-gradient(circle, rgba(8,138,99,0.12) 0%, transparent 70%);
+  border-radius: 50%;
+}
+.card-chip {
+  position: absolute; top: 26px; right: 30px;
+  width: 46px; height: 34px;
+  background: linear-gradient(135deg, #c8a961, #e8d48b, #c8a961);
+  border-radius: 5px; opacity: 0.55;
+  display: flex; align-items: center; justify-content: center;
+}
+.card-chip::after {
+  content: ''; width: 28px; height: 20px;
+  border: 1.5px solid rgba(0,0,0,0.15); border-radius: 3px;
+}
+.card-network {
+  position: absolute; bottom: 26px; right: 30px;
+  font-size: 11px; color: var(--text-muted);
+  font-weight: 500; letter-spacing: 1px; z-index: 2;
+}
+.balance-top { position: relative; z-index: 2; }
+.balance-label {
+  font-size: 12px; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 6px;
+}
+.balance-amount {
+  font-size: 34px; font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  background: linear-gradient(135deg, #fff 30%, var(--green-light));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.balance-currency { font-size: 16px; font-weight: 500; opacity: 0.7; }
+.balance-pending { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+.balance-bottom {
+  display: flex; justify-content: space-between;
+  position: relative; z-index: 2; margin-top: 18px;
+}
+.balance-address {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; color: var(--text-muted); letter-spacing: 2px;
+}
+.action-row { display: flex; gap: 12px; margin-bottom: 22px; }
+.action-btn {
+  flex: 1; padding: 13px; border-radius: 12px; border: none;
+  font-family: 'Outfit', sans-serif; font-size: 14px; font-weight: 550;
+  cursor: pointer; transition: all 0.25s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn-send {
+  background: linear-gradient(135deg, var(--green), var(--green-light));
+  color: white; box-shadow: 0 4px 16px rgba(8,138,99,0.3);
+}
+.btn-send:hover { box-shadow: 0 6px 24px rgba(8,138,99,0.45); transform: translateY(-1px); }
+.btn-receive {
+  background: var(--bg-card); color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+.btn-receive:hover { background: var(--bg-card-hover); border-color: var(--border-active); }
+.stats-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-bottom: 22px; }
+.stat-card {
+  background: var(--bg-card); border-radius: 12px; padding: 16px;
+  border: 1px solid var(--border); transition: border-color 0.2s;
+}
+.stat-card:hover { border-color: var(--border-active); }
+.stat-label {
+  font-size: 11px; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px;
+}
+.stat-value { font-size: 17px; font-weight: 600; font-family: 'JetBrains Mono', monospace; }
+.stat-sub { font-size: 10px; color: var(--text-muted); margin-top: 3px; }
+.tx-header { display: flex; justify-content: space-between; margin-bottom: 14px; }
+.tx-title { font-size: 15px; font-weight: 600; }
+.tx-list { display: flex; flex-direction: column; gap: 6px; }
+.tx-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; background: var(--bg-card); border-radius: 11px;
+  border: 1px solid transparent; transition: all 0.2s; cursor: pointer;
+}
+.tx-item:hover { border-color: var(--border); background: var(--bg-card-hover); }
+.tx-icon-wrap {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; font-weight: 600; flex-shrink: 0;
+}
+.tx-icon-wrap.receive { background: var(--green-soft); color: var(--green-light); }
+.tx-icon-wrap.send { background: var(--red-soft); color: var(--red); }
+.tx-icon-wrap.generate { background: var(--yellow-soft); color: var(--yellow); }
+.tx-icon-wrap.immature { background: rgba(138,148,168,0.1); color: var(--text-secondary); }
+.tx-details { flex: 1; min-width: 0; }
+.tx-type { font-size: 13px; font-weight: 500; margin-bottom: 2px; }
+.tx-address {
+  font-size: 11px; color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tx-right { text-align: right; flex-shrink: 0; }
+.tx-amount { font-size: 13px; font-weight: 600; font-family: 'JetBrains Mono', monospace; }
+.tx-amount.positive { color: var(--green-light); }
+.tx-amount.negative { color: var(--red); }
+.tx-date { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+.tx-conf {
+  font-size: 9px; color: var(--text-muted);
+  background: rgba(255,255,255,0.04); padding: 2px 6px;
+  border-radius: 4px; display: inline-block; margin-top: 3px;
+}
+.form-group { margin-bottom: 18px; }
+.form-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; display: block; }
+.form-input {
+  width: 100%; padding: 12px 16px; background: var(--bg-primary);
+  border: 1px solid var(--border); border-radius: 10px;
+  color: var(--text-primary); font-family: 'JetBrains Mono', monospace;
+  font-size: 14px; outline: none; transition: border-color 0.2s;
+}
+.form-input:focus { border-color: var(--green); }
+.form-input::placeholder { color: var(--text-muted); font-family: 'Outfit', sans-serif; }
+.send-btn {
+  width: 100%; padding: 14px;
+  background: linear-gradient(135deg, var(--green), var(--green-light));
+  color: white; border: none; border-radius: 12px;
+  font-family: 'Outfit', sans-serif; font-size: 15px; font-weight: 600;
+  cursor: pointer; transition: all 0.25s; margin-top: 10px;
+}
+.send-btn:hover { box-shadow: 0 6px 24px rgba(8,138,99,0.4); transform: translateY(-1px); }
+.send-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+.receive-address-box {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 18px;
+}
+.receive-address {
+  font-family: 'JetBrains Mono', monospace; font-size: 15px;
+  color: var(--green-light); word-break: break-all; margin-bottom: 12px;
+}
+.copy-btn {
+  padding: 8px 24px; background: var(--bg-primary);
+  border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text-primary); font-family: 'Outfit', sans-serif;
+  font-size: 13px; cursor: pointer; transition: all 0.2s;
+}
+.copy-btn:hover { border-color: var(--green); color: var(--green-light); }
+.new-address-btn {
+  width: 100%; padding: 12px; background: var(--bg-card);
+  border: 1px solid var(--border); border-radius: 10px;
+  color: var(--text-primary); font-family: 'Outfit', sans-serif;
+  font-size: 14px; cursor: pointer; transition: all 0.2s;
+}
+.new-address-btn:hover { border-color: var(--green); background: var(--green-soft); }
+.status-msg {
+  padding: 12px 16px; border-radius: 10px; font-size: 13px;
+  margin-top: 12px; display: none;
+}
+.status-msg.success {
+  display: block; background: var(--green-soft);
+  border: 1px solid rgba(13,181,132,0.2); color: var(--green-light);
+}
+.status-msg.error {
+  display: block; background: var(--red-soft);
+  border: 1px solid rgba(231,76,94,0.2); color: var(--red);
+}
+.bottom-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 22px; height: 32px; background: var(--bg-secondary);
+  border-top: 1px solid var(--border); font-size: 11px; color: var(--text-muted);
+}
+.bottom-bar-left { display: flex; align-items: center; gap: 16px; }
+.peers-dot {
+  width: 6px; height: 6px; background: var(--green-light);
+  border-radius: 50%; box-shadow: 0 0 4px var(--green-light);
+  display: inline-block; margin-right: 5px;
+}
+.loading { color: var(--text-muted); font-size: 13px; text-align: center; padding: 40px; }
+
+.tx-modal-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:1000; justify-content:center; align-items:center; }
+.tx-modal-overlay.active { display:flex; }
+.tx-modal { background:var(--bg-card); border:1px solid var(--border); border-radius:14px; padding:28px; width:520px; max-height:80vh; overflow-y:auto; }
+.tx-modal-title { font-size:18px; font-weight:600; margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; }
+.tx-modal-close { cursor:pointer; font-size:20px; color:var(--text-secondary); padding:4px 8px; border-radius:6px; }
+.tx-modal-close:hover { background:var(--bg-primary); color:var(--text-primary); }
+.tx-modal-row { display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--border); }
+.tx-modal-label { color:var(--text-muted); font-size:13px; }
+.tx-modal-value { color:var(--text-primary); user-select:text; -webkit-user-select:text; font-size:13px; font-family:JetBrains Mono,monospace; text-align:right; max-width:320px; word-break:break-all; }
+</style>
+</head>
+<body>
+<div class="title-bar">
+  <div class="title-bar-text">Gaelium Wallet v1.0.0</div>
+  <div class="window-controls">
+    <button class="win-btn win-min" onclick="window.gaelium.minimize()">─</button>
+    <button class="win-btn win-max" onclick="window.gaelium.maximize()">□</button>
+    <button class="win-btn win-close" onclick="window.gaelium.close()">✕</button>
+  </div>
+</div>
+<div class="app-layout">
+  <div class="sidebar">
+    <div class="sidebar-logo">
+      <img src="assets/logo.png" style="width:38px;height:38px;border-radius:10px;object-fit:contain;">
+      <div>
+        <div class="logo-text">Gaelium</div>
+        <div class="logo-version">Wallet v1.0.0</div>
+      </div>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-item active" data-page="overview">
+        <span class="nav-icon">◉</span> Overview
+      </div>
+      <div class="nav-item" data-page="send">
+        <span class="nav-icon">↑</span> Send
+      </div>
+      <div class="nav-item" data-page="receive">
+        <span class="nav-icon">↓</span> Receive
+      </div>
+      <div class="nav-item" data-page="transactions">
+        <span class="nav-icon">⟲</span> Transactions
+      </div>
+      <div class="nav-item" data-page="security">
+        <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></span> Security
+      </div>
+      <div class="nav-item" data-page="import">
+        <span class="nav-icon">⚿</span> Keys
+      </div>
+      <div class="nav-spacer"></div>
+      <div style="padding:10px 14px;border-top:1px solid var(--border);margin-top:6px;">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Market</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <img src="assets/btc.png" style="width:24px;height:24px;border-radius:50%;">
+          <div><div style="font-size:11px;color:var(--text-secondary);">Bitcoin</div><div style="font-size:13px;font-weight:600;font-family:JetBrains Mono,monospace;" id="btcPrice">...</div><div style="font-size:13px;color:var(--text-secondary);font-family:JetBrains Mono,monospace;" id="btcPriceEur"></div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <img src="assets/eth.png" style="width:24px;height:24px;border-radius:50%;">
+          <div><div style="font-size:11px;color:var(--text-secondary);">Ethereum</div><div style="font-size:13px;font-weight:600;font-family:JetBrains Mono,monospace;" id="ethPrice">...</div><div style="font-size:13px;color:var(--text-secondary);font-family:JetBrains Mono,monospace;" id="ethPriceEur"></div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <img src="assets/xmr.png" style="width:24px;height:24px;border-radius:50%;">
+          <div><div style="font-size:11px;color:var(--text-secondary);">Monero</div><div style="font-size:13px;font-weight:600;font-family:JetBrains Mono,monospace;" id="xmrPrice">...</div><div style="font-size:13px;color:var(--text-secondary);font-family:JetBrains Mono,monospace;" id="xmrPriceEur"></div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <img src="assets/doge.png" style="width:24px;height:24px;border-radius:50%;">
+          <div><div style="font-size:11px;color:var(--text-secondary);">Dogecoin</div><div style="font-size:13px;font-weight:600;font-family:JetBrains Mono,monospace;" id="dogePrice">...</div><div style="font-size:13px;color:var(--text-secondary);font-family:JetBrains Mono,monospace;" id="dogePriceEur"></div></div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;">
+          <img src="assets/logo.png" style="width:24px;height:24px;border-radius:50%;">
+          <div><div style="font-size:11px;color:var(--text-secondary);">Gaelium</div><div style="font-size:13px;font-weight:600;font-family:JetBrains Mono,monospace;color:var(--green-light);" id="gaelPrice">Coming soon</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="sidebar-footer">
+      <div class="sync-status">
+        <div class="sync-dot"></div>
+        <span id="syncText">Starting daemon...</span>
+      </div>
+    </div>
+  </div>
+  <div class="main-content">
+    <div class="page active" id="page-overview">
+      <div class="page-title">Overview</div>
+      <div class="balance-card">
+        <img src="assets/logo.png" style="position:absolute;top:20px;right:25px;width:50px;height:50px;opacity:0.25;border-radius:8px;">
+        <div class="card-network">Gaelium Network • KAWPOW</div>
+        <div class="balance-top">
+          <div class="balance-label">Available Balance</div>
+          <div class="balance-amount" id="balanceAmount">--<span class="balance-currency"> GAEL</span></div>
+          <div class="balance-pending" id="balancePending"></div>
+        </div>
+        <div class="balance-bottom">
+          <div class="balance-address" id="balanceAddress">Starting Gaelium Core...</div>
+        </div>
+      </div>
+      <div class="action-row">
+        <button class="action-btn btn-send" onclick="navigateTo('send')">↑ Send GAEL</button>
+        <button class="action-btn btn-receive" onclick="navigateTo('receive')">↓ Receive GAEL</button>
+      </div>
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">Block Height</div>
+          <div class="stat-value" id="statBlocks">--</div>
+          <div class="stat-sub" id="statReward">Reward: 1,000 GAEL</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Network Hash</div>
+          <div class="stat-value" id="statHash">--</div>
+          <div class="stat-sub">KAWPOW algorithm</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Connections</div>
+          <div class="stat-value" id="statPeers">--</div>
+          <div class="stat-sub" id="statDiff">--</div>
+        </div>
+      </div>
+      <div class="tx-header"><div class="tx-title">Recent Transactions</div></div>
+      <div class="tx-list" id="txList"><div class="loading">Loading transactions...</div></div>
+    </div>
+    <div class="page" id="page-send">
+      <div class="page-title">Send GAEL</div>
+      <div class="form-group">
+        <label class="form-label">Recipient Address</label>
+        <input type="text" class="form-input" id="sendAddress" placeholder="Enter Gaelium address (G...)">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Amount (GAEL)</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="number" class="form-input" id="sendAmount" placeholder="0.00" step="0.01" min="0" style="flex:1;">
+          <button onclick="fillMaxAmount()" style="padding:12px 16px;background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;color:var(--green-light);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">Max</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Estimated network fee: ~0.003 GAEL</div>
+      </div>
+      <button class="send-btn" id="sendBtn" onclick="sendTransaction()">Send Transaction</button>
+      <div class="status-msg" id="sendStatus"></div>
+    </div>
+    <div class="page" id="page-receive">
+      <div class="page-title">Receive GAEL</div>
+      <div class="receive-address-box">
+        <div class="form-label">Your Gaelium Address</div>
+        <div class="receive-address" id="receiveAddress">Loading...</div>
+        <button class="copy-btn" onclick="copyAddress()">Copy Address</button>
+      </div>
+      <div style="margin-top:16px;max-width:550px;">
+        <label style="display:block;font-size:13px;color:var(--text-secondary);margin-bottom:6px;">Label (optional)</label>
+        <input type="text" id="newAddrLabel" placeholder="e.g. Mining, Donation, Payment..." style="width:100%;padding:12px 16px;background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor='var(--green-light)'" onblur="this.style.borderColor='var(--border)'">
+      </div>
+      <button class="new-address-btn" onclick="generateNewAddress()">+ Generate New Address</button>
+      <div class="status-msg" id="receiveStatus"></div>
+      <div style="margin-top:24px;">
+        <div style="font-size:16px;font-weight:600;margin-bottom:12px;">Address History</div>
+        <div id="addressHistory" style="max-height:400px;overflow-y:auto;"></div>
+      </div>
+    </div>
+
+    <div class="page" id="page-import">
+      <h2 style="margin-bottom:20px;font-size:20px;">Import / Export Private Key</h2>
+      <div style="background:var(--bg-card);border-radius:14px;padding:24px;border:1px solid var(--border);max-width:550px;">
+        <div style="margin-bottom:16px;">
+          <label style="display:block;font-size:13px;color:var(--text-secondary);margin-bottom:6px;">Private Key</label>
+          <input type="password" id="importKeyInput" placeholder="Enter your private key..." style="width:100%;padding:12px 16px;background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;color:var(--text-primary);font-family:JetBrains Mono,monospace;font-size:13px;outline:none;" onfocus="this.style.borderColor='var(--green-light)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+        <div style="margin-bottom:16px;">
+          <label style="display:block;font-size:13px;color:var(--text-secondary);margin-bottom:6px;">Label (optional)</label>
+          <input type="text" id="importKeyLabel" placeholder="e.g. Premine, Mining rewards..." style="width:100%;padding:12px 16px;background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;" onfocus="this.style.borderColor='var(--green-light)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+        <div style="margin-bottom:20px;display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" id="importRescan" checked style="accent-color:var(--green-primary);width:16px;height:16px;">
+          <label for="importRescan" style="font-size:13px;color:var(--text-secondary);">Rescan blockchain (slower but finds all transactions)</label>
+        </div>
+        <button onclick="importPrivateKey()" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--green-primary),var(--green-light));color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(13,181,132,0.35)'" onmouseout="this.style.transform='none';this.style.boxShadow='none'">⚿ Import Private Key</button>
+        <div id="importStatus" style="margin-top:14px;padding:12px;border-radius:8px;font-size:13px;display:none;"></div>
+        <div style="margin-top:16px;padding:14px;background:rgba(240,180,41,0.08);border:1px solid rgba(240,180,41,0.2);border-radius:10px;">
+          <div style="font-size:12px;color:var(--yellow);font-weight:600;margin-bottom:4px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Warning</div>
+          <div style="font-size:12px;color:var(--text-secondary);line-height:1.5;">Never share your private key with anyone. With rescan enabled, the wallet may freeze for a few minutes while scanning the blockchain.</div>
+        </div>
+      </div>
+      <div style="background:var(--bg-card);border-radius:14px;padding:24px;border:1px solid var(--border);max-width:550px;margin-top:20px;">
+        <h3 style="font-size:16px;margin-bottom:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Export Private Key</h3>
+        <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">Enter a Gaelium address from your wallet to reveal its private key.</p>
+        <div style="margin-bottom:16px;">
+          <label style="display:block;font-size:13px;color:var(--text-secondary);margin-bottom:6px;">Gaelium Address</label>
+          <input type="text" id="exportAddress" placeholder="Enter your Gaelium address (G...)..." style="width:100%;padding:12px 16px;background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;color:var(--text-primary);font-family:JetBrains Mono,monospace;font-size:13px;outline:none;" onfocus="this.style.borderColor='var(--green-light)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+        <button onclick="exportPrivateKey()" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--green),var(--green-light));color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(13,181,132,0.35)'" onmouseout="this.style.transform='none';this.style.boxShadow='none'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Export Private Key</button>
+        <div id="exportResult" style="margin-top:14px;padding:12px;border-radius:8px;font-size:13px;display:none;"></div>
+        <div style="margin-top:16px;padding:14px;background:rgba(231,76,94,0.08);border:1px solid rgba(231,76,94,0.2);border-radius:10px;">
+          <div style="font-size:12px;color:var(--red);font-weight:600;margin-bottom:4px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Security Warning</div>
+          <div style="font-size:12px;color:var(--text-secondary);line-height:1.5;">Your private key gives full access to your funds. Never share it. Store it safely offline.</div>
+        </div>
+      </div>
+    </div>
+    <div class="page" id="page-security">
+      <h2 style="font-size:20px;margin-bottom:20px;">Wallet Security</h2>
+      <!-- ENCRYPT SECTION (shown only when wallet is NOT encrypted) -->
+      <div id="secEncrypt" style="display:none;background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px;max-width:550px;">
+        <h3 style="font-size:16px;margin-bottom:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> Encrypt Wallet</h3>
+        <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">Encrypt your wallet with a passphrase. This protects your funds if someone copies your wallet file. <strong style="color:var(--red);">Warning: If you lose your passphrase, you lose access to your funds!</strong></p>
+        <div style="margin-bottom:12px;">
+          <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:6px;">Passphrase</label>
+          <input type="password" id="encryptPass1" placeholder="Enter passphrase (min 8 characters)..." style="width:100%;padding:12px 16px;background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;" onfocus="this.style.borderColor='var(--green-light)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+        <div style="margin-bottom:16px;">
+          <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:6px;">Confirm Passphrase</label>
+          <input type="password" id="encryptPass2" placeholder="Confirm passphrase..." style="width:100%;padding:12px 16px;background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;" onfocus="this.style.borderColor='var(--green-light)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+        <button onclick="encryptWallet()" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--green),var(--green-light));color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(13,181,132,0.35)'" onmouseout="this.style.transform='none';this.style.boxShadow='none'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> Encrypt Wallet</button>
+        <div id="encryptStatus" style="margin-top:14px;padding:12px;border-radius:8px;font-size:13px;display:none;"></div>
+      </div>
+      <!-- CHANGE PASSWORD SECTION (shown only when wallet IS encrypted) -->
+      <div id="secChangePass" style="display:none;background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px;max-width:550px;">
+        <h3 style="font-size:16px;margin-bottom:6px;">⚿ Change Passphrase</h3>
+        <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">Change your wallet encryption passphrase.</p>
+        <div style="margin-bottom:12px;">
+          <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:6px;">Current Passphrase</label>
+          <input type="password" id="chgOldPass" placeholder="Enter current passphrase..." style="width:100%;padding:12px 16px;background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;" onfocus="this.style.borderColor='var(--green-light)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:6px;">New Passphrase</label>
+          <input type="password" id="chgNewPass1" placeholder="Enter new passphrase (min 8 characters)..." style="width:100%;padding:12px 16px;background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;" onfocus="this.style.borderColor='var(--green-light)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+        <div style="margin-bottom:16px;">
+          <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:6px;">Confirm New Passphrase</label>
+          <input type="password" id="chgNewPass2" placeholder="Confirm new passphrase..." style="width:100%;padding:12px 16px;background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;" onfocus="this.style.borderColor='var(--green-light)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+        <button onclick="changePassphrase()" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--green),var(--green-light));color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(13,181,132,0.35)'" onmouseout="this.style.transform='none';this.style.boxShadow='none'">⚿ Change Passphrase</button>
+        <div id="changePassStatus" style="margin-top:14px;padding:12px;border-radius:8px;font-size:13px;display:none;"></div>
+      </div>
+      <!-- UNLOCK / LOCK SECTION (shown only when wallet IS encrypted) -->
+      <div id="secUnlock" style="display:none;background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px;max-width:550px;">
+        <h3 style="font-size:16px;margin-bottom:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 019.9-1"/></svg> Unlock / Lock Wallet</h3>
+        <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">Unlock your wallet to send transactions. It will auto-lock after the timeout.</p>
+        <div style="margin-bottom:12px;">
+          <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:6px;">Passphrase</label>
+          <input type="password" id="unlockPass" placeholder="Enter passphrase..." style="width:100%;padding:12px 16px;background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;" onfocus="this.style.borderColor='var(--green-light)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+        <div style="margin-bottom:16px;">
+          <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:6px;">Unlock duration (seconds)</label>
+          <input type="number" id="unlockTimeout" value="300" min="10" max="3600" style="width:200px;padding:12px 16px;background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;" onfocus="this.style.borderColor='var(--green-light)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+        <div style="display:flex;gap:10px;">
+          <button onclick="unlockWallet()" style="flex:1;padding:14px;background:linear-gradient(135deg,var(--green),var(--green-light));color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform='none'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 019.9-1"/></svg> Unlock</button>
+          <button onclick="lockWallet()" style="flex:1;padding:14px;background:linear-gradient(135deg,#dc2626,#ef4444);color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform='none'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> Lock</button>
+        </div>
+        <div id="unlockStatus" style="margin-top:14px;padding:12px;border-radius:8px;font-size:13px;display:none;"></div>
+      </div>
+      <!-- STATUS SECTION (always shown) -->
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:550px;">
+        <h3 style="font-size:16px;margin-bottom:10px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> Encryption Status</h3>
+        <div id="lockStatus" style="color:var(--text-secondary);font-size:14px;">Checking...</div>
+      </div>
+      <!-- BACKUP SECTION (always shown) -->
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:550px;margin-top:20px;">
+        <h3 style="font-size:16px;margin-bottom:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Backup Wallet</h3>
+        <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">Save a copy of your wallet file to a safe location. This backup contains all your private keys and addresses.</p>
+        <button onclick="backupWallet()" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--green),var(--green-light));color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(13,181,132,0.35)'" onmouseout="this.style.transform='none';this.style.boxShadow='none'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Backup Wallet</button>
+        <div id="backupStatus" style="margin-top:14px;padding:12px;border-radius:8px;font-size:13px;display:none;"></div>
+      </div>
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:550px;margin-top:20px;">
+        <h3 style="font-size:16px;margin-bottom:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Restore Wallet</h3>
+        <p style="color:var(--text-muted);font-size:13px;margin-bottom:12px;">Restore your wallet from a previous backup file. The wallet will restart after restoration.</p>
+        <div style="padding:12px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:10px;margin-bottom:16px;">
+          <div style="font-size:12px;color:var(--red);font-weight:600;margin-bottom:4px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Warning</div>
+          <div style="font-size:12px;color:var(--text-secondary);line-height:1.5;">Your current wallet will be automatically backed up before restoration. However, all transactions made since the backup was created will not appear in the restored wallet.</div>
+        </div>
+        <button onclick="restoreWallet()" style="width:100%;padding:14px;background:linear-gradient(135deg,#e67e22,#f39c12);color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(230,126,34,0.35)'" onmouseout="this.style.transform='none';this.style.boxShadow='none'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Restore from Backup</button>
+        <div id="restoreStatus" style="margin-top:14px;padding:12px;border-radius:8px;font-size:13px;display:none;"></div>
+      </div>
+    </div>
+    <div class="page" id="page-transactions">
+      <div class="page-title">Transactions</div>
+      <div class="tx-list" id="txListFull"><div class="loading">Loading transactions...</div></div>
+    </div>
+  </div>
+</div>
+<div class="bottom-bar">
+  <div class="bottom-bar-left">
+    <span><span class="peers-dot"></span><span id="bottomPeers">0</span> peers</span>
+    <span>Block: <span id="bottomBlock">--</span></span>
+    <span>Hash: <span id="bottomHash">--</span></span>
+  </div>
+  <span>Gaelium Core v1.0.0</span>
+</div>
+<script>
+// HTML escaping to prevent XSS
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// Security functions
+async function encryptWallet() {
+  const p1 = document.getElementById('encryptPass1').value;
+  const p2 = document.getElementById('encryptPass2').value;
+  const status = document.getElementById('encryptStatus');
+  if (!p1 || p1.length < 8) {
+    status.style.display='block'; status.style.background='rgba(239,68,68,0.15)'; status.style.color='var(--red)';
+    status.textContent='Passphrase must be at least 8 characters.'; return;
+  }
+  if (p1 !== p2) {
+    status.style.display='block'; status.style.background='rgba(239,68,68,0.15)'; status.style.color='var(--red)';
+    status.textContent='Passphrases do not match.'; return;
+  }
+  if (!confirm('WARNING: Encrypting your wallet is irreversible. If you lose your passphrase, you will PERMANENTLY lose access to your funds. Are you sure?')) return;
+  status.style.display='block'; status.style.background='rgba(16,185,129,0.1)'; status.style.color='var(--green-light)';
+  status.textContent='Encrypting wallet... The wallet will restart automatically, please wait.';
+  document.getElementById('encryptPass1').value='';
+  document.getElementById('encryptPass2').value='';
+  // The wallet will automatically close and reopen after encryption
+  const result = await window.gaelium.encryptWallet(p1);
+  // If we get here, relaunch failed - show error
+  if (result && result.error) {
+    status.style.background='rgba(239,68,68,0.15)'; status.style.color='var(--red)';
+    status.textContent='Error: ' + (result.error.message || result.error);
+  }
+}
+
+async function restoreWallet() {
+  const status = document.getElementById('restoreStatus');
+  if (!confirm('Are you sure you want to restore a wallet from backup?\n\nYour current wallet will be automatically backed up before restoration. The wallet will restart after the process is complete.')) return;
+  status.style.display='block'; status.style.background='rgba(16,185,129,0.1)'; status.style.color='var(--green-light)';
+  status.textContent='Select your backup wallet file...';
+  try {
+    const result = await window.gaelium.restoreWallet();
+    if (result.error) {
+      status.style.background='rgba(239,68,68,0.15)'; status.style.color='var(--red)';
+      status.textContent='Error: ' + result.error;
+    } else if (result.cancelled) {
+      status.style.display='none';
+    }
+  } catch(e) {
+    status.style.background='rgba(239,68,68,0.15)'; status.style.color='var(--red)';
+    status.textContent='Error: ' + e.message;
+  }
+}
+async function changePassphrase() {
+  const oldPass = document.getElementById('chgOldPass').value;
+  const newPass1 = document.getElementById('chgNewPass1').value;
+  const newPass2 = document.getElementById('chgNewPass2').value;
+  const status = document.getElementById('changePassStatus');
+  if (!oldPass) {
+    status.style.display='block'; status.style.background='rgba(239,68,68,0.15)'; status.style.color='var(--red)';
+    status.textContent='Please enter your current passphrase.'; return;
+  }
+  if (!newPass1 || newPass1.length < 8) {
+    status.style.display='block'; status.style.background='rgba(239,68,68,0.15)'; status.style.color='var(--red)';
+    status.textContent='New passphrase must be at least 8 characters.'; return;
+  }
+  if (newPass1 !== newPass2) {
+    status.style.display='block'; status.style.background='rgba(239,68,68,0.15)'; status.style.color='var(--red)';
+    status.textContent='New passphrases do not match.'; return;
+  }
+  status.style.display='block'; status.style.background='rgba(16,185,129,0.1)'; status.style.color='var(--green-light)';
+  status.textContent='Changing passphrase...';
+  const result = await window.gaelium.walletPassphraseChange(oldPass, newPass1);
+  if (result && result.error) {
+    status.style.background='rgba(239,68,68,0.15)'; status.style.color='var(--red)';
+    const msg = result.error.message || result.error;
+    if (msg.includes('incorrect') || msg.includes('passphrase')) {
+      status.textContent='Error: Current passphrase is incorrect.';
+    } else {
+      status.textContent='Error: ' + msg;
+    }
+  } else {
+    status.style.background='rgba(16,185,129,0.1)'; status.style.color='var(--green-light)';
+    status.textContent='Passphrase changed successfully!';
+    document.getElementById('chgOldPass').value='';
+    document.getElementById('chgNewPass1').value='';
+    document.getElementById('chgNewPass2').value='';
+  }
+}
+
+async function unlockWallet() {
+  const pass = document.getElementById('unlockPass').value;
+  const timeout = parseInt(document.getElementById('unlockTimeout').value) || 300;
+  const status = document.getElementById('unlockStatus');
+  if (!pass) {
+    status.style.display='block'; status.style.background='rgba(239,68,68,0.15)'; status.style.color='var(--red)';
+    status.textContent='Please enter your passphrase.'; return;
+  }
+  const result = await window.gaelium.walletPassphrase(pass, timeout);
+  status.style.display='block';
+  if (result && result.error) {
+    status.style.background='rgba(239,68,68,0.15)'; status.style.color='var(--red)';
+    status.textContent='Error: ' + (result.error.message || result.error);
+  } else {
+    status.style.background='rgba(16,185,129,0.1)'; status.style.color='var(--green-light)';
+    status.textContent='Wallet unlocked for ' + timeout + ' seconds.';
+    document.getElementById('unlockPass').value='';
+    updateSecurityPage();
+  }
+}
+
+async function lockWallet() {
+  const status = document.getElementById('unlockStatus');
+  const result = await window.gaelium.walletLock();
+  status.style.display='block';
+  if (result && result.error) {
+    status.style.background='rgba(239,68,68,0.15)'; status.style.color='var(--red)';
+    status.textContent='Error: ' + (result.error.message || result.error);
+  } else {
+    status.style.background='rgba(16,185,129,0.1)'; status.style.color='var(--green-light)';
+    status.textContent='Wallet locked.';
+    updateSecurityPage();
+  }
+}
+
+async function backupWallet() {
+  const status = document.getElementById('backupStatus');
+  status.style.display='block'; status.style.background='var(--green-soft)'; status.style.color='var(--green-light)';
+  status.textContent='Saving backup...';
+  try {
+    const result = await window.gaelium.backupWallet();
+    if (result.canceled) {
+      status.style.display='none';
+    } else if (result.error) {
+      status.style.background='var(--red-soft)'; status.style.color='var(--red)';
+      status.textContent='Error: ' + result.error;
+    } else {
+      status.style.background='var(--green-soft)'; status.style.color='var(--green-light)';
+      status.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Wallet backed up successfully!';
+    }
+  } catch(e) {
+    status.style.background='var(--red-soft)'; status.style.color='var(--red)';
+    status.textContent='Error: ' + String(e);
+  }
+}
+async function updateSecurityPage() {
+  try {
+    const info = await window.gaelium.getWalletInfo();
+    const el = document.getElementById('lockStatus');
+    const isEncrypted = info && typeof info.unlocked_until !== 'undefined';
+    // Show/hide sections based on encryption state
+    document.getElementById('secEncrypt').style.display = isEncrypted ? 'none' : 'block';
+    document.getElementById('secChangePass').style.display = isEncrypted ? 'block' : 'none';
+    document.getElementById('secUnlock').style.display = isEncrypted ? 'block' : 'none';
+    if (el) {
+      if (!isEncrypted) {
+        el.innerHTML = '<span style="color:var(--yellow);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Wallet is NOT encrypted.</span> Use the form above to protect it with a passphrase.';
+      } else if (info.unlocked_until === 0) {
+        el.innerHTML = '<span style="color:var(--green-light);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> Wallet is encrypted and locked.</span>';
+      } else {
+        el.innerHTML = '<span style="color:var(--green-light);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 019.9-1"/></svg> Wallet is encrypted and unlocked.</span>';
+      }
+    }
+  } catch(e) {}
+}
+// Keep old name for compatibility
+async function updateLockStatus() { await updateSecurityPage(); }
+function navigateTo(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelector('.nav-item[data-page="'+page+'"]').classList.add('active');
+  // Clear sensitive data when navigating away from keys page
+  const exportedKey = document.getElementById('exportedKeyValue');
+  if (exportedKey) exportedKey.textContent='';
+  const exportResult = document.getElementById('exportResult');
+  if (exportResult) exportResult.style.display='none';
+  if (page === 'receive') { loadReceiveAddress(); loadAddressHistory(); }
+  if (page === 'transactions') loadAllTransactions();
+  if (page === 'security') updateLockStatus();
+}
+if (window.gaelium.onNavigateTo) { window.gaelium.onNavigateTo((page) => {
+  // After relaunch, daemon may not be ready yet — retry navigation
+  async function waitAndNavigate(p, retries) {
+    navigateTo(p);
+    if (p === 'security') {
+      for (let i = 0; i < (retries || 15); i++) {
+        const info = await window.gaelium.getWalletInfo();
+        if (info && !info.error) { updateLockStatus(); return; }
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      updateLockStatus();
+    }
+  }
+  waitAndNavigate(page, 15);
+}); }
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => navigateTo(item.dataset.page));
+});
+function formatAmount(a) {
+  let n = parseFloat(a); if (isNaN(n)) return '0.00';
+  let p = n.toFixed(2).split('.');
+  p[0] = p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return p.join('.');
+}
+function formatHash(h) {
+  if (h >= 1e12) return (h/1e12).toFixed(2)+' TH/s';
+  if (h >= 1e9) return (h/1e9).toFixed(2)+' GH/s';
+  if (h >= 1e6) return (h/1e6).toFixed(2)+' MH/s';
+  if (h >= 1e3) return (h/1e3).toFixed(2)+' KH/s';
+  return h.toFixed(2)+' H/s';
+}
+function timeAgo(t) {
+  let d = Math.floor(Date.now()/1000) - t;
+  if (d < 60) return 'Just now';
+  if (d < 3600) return Math.floor(d/60)+'m ago';
+  if (d < 86400) return Math.floor(d/3600)+'h ago';
+  return Math.floor(d/86400)+'d ago';
+}
+function filterChangeTx(txs) {
+  // Group by txid
+  const byTxid = {};
+  txs.forEach(tx => {
+    if (!byTxid[tx.txid]) byTxid[tx.txid] = [];
+    byTxid[tx.txid].push(tx);
+  });
+  // For each txid with sends + receives, the receive addresses are change
+  const changeAddrs = {};
+  Object.keys(byTxid).forEach(txid => {
+    const entries = byTxid[txid];
+    const sends = entries.filter(e => e.category === 'send');
+    const receives = entries.filter(e => e.category === 'receive');
+    if (sends.length > 0 && receives.length > 0) {
+      changeAddrs[txid] = new Set(receives.map(r => r.address));
+    }
+  });
+  // Filter: hide change receives and send entries going to change addresses
+  return txs.filter(tx => {
+    if (!changeAddrs[tx.txid]) return true;
+    if (tx.category === 'receive') return false;
+    if (tx.category === 'send' && changeAddrs[tx.txid].has(tx.address)) return false;
+    return true;
+  });
+}
+
+function buildTxItem(tx) {
+  let icon='↓', tc='receive', tl='Received', ac='positive';
+  if (tx.category==='send') { icon='↑'; tc='send'; tl='Sent'; ac='negative'; }
+  else if (tx.category==='generate') { icon='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="12" y1="6" x2="12" y2="18"/></svg>'; tc='generate'; tl='Mined — Block #'+escapeHtml(tx.blockheight||''); }
+  else if (tx.category==='immature') { icon='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'; tc='immature'; tl='Immature — Block #'+escapeHtml(tx.blockheight||''); }
+  let addr = tx.address||'Unknown';
+  let sa = addr.length>34 ? addr.substring(0,16)+'...'+addr.substring(addr.length-8) : addr;
+  let amt = tx.amount<0 ? formatAmount(tx.amount) : '+'+formatAmount(tx.amount);
+  let safeTxid = escapeHtml(tx.txid);
+  let safeSa = escapeHtml(sa);
+  let safeTl = escapeHtml(tl);
+  let safeAmt = escapeHtml(amt);
+  let safeDate = tx.time ? escapeHtml(new Date(tx.time*1000).toLocaleString()) : 'pending';
+  let safeConf = escapeHtml(tx.confirmations||0);
+  return '<div class="tx-item" style="cursor:pointer" data-txid="'+safeTxid+'"><div class="tx-icon-wrap '+escapeHtml(tc)+'">'+icon+'</div><div class="tx-details"><div class="tx-type">'+safeTl+'</div><div class="tx-address">'+safeSa+'</div></div><div class="tx-right"><div class="tx-amount '+(tx.amount<0?'negative':'positive')+'">'+safeAmt+' GAEL</div><div class="tx-date">'+safeDate+'</div><span class="tx-conf">'+safeConf+' conf.</span></div></div>';
+}
+let _startupAttempts = 0;
+async function updateDashboard() {
+  try {
+    const d = await window.gaelium.getBalance();
+    if (d.error) { _startupAttempts++; if (_startupAttempts < 12) { document.getElementById('balanceAddress').textContent='Starting Gaelium Wallet, please wait...'; } else { document.getElementById('balanceAddress').textContent='Unable to connect to Gaelium daemon. Please restart the wallet or check your firewall settings.'; } return; } _startupAttempts = 0;
+    document.getElementById('balanceAmount').innerHTML=formatAmount(d.balance)+'<span class="balance-currency"> GAEL</span>';
+    let pp=[];
+    if (d.unconfirmed>0) pp.push('Pending: '+formatAmount(d.unconfirmed)+' GAEL');
+    if (d.immature>0) pp.push('Immature: '+formatAmount(d.immature)+' GAEL');
+    document.getElementById('balancePending').textContent=pp.join(' | ');
+    document.getElementById('statBlocks').textContent=d.blocks.toLocaleString();
+    document.getElementById('statHash').textContent=formatHash(d.networkhashps);
+    document.getElementById('statPeers').textContent=d.connections;
+    document.getElementById('statDiff').textContent='Diff: '+parseFloat(d.difficulty).toFixed(4);
+    document.getElementById('bottomPeers').textContent=d.connections;
+    document.getElementById('bottomBlock').textContent=d.blocks;
+    document.getElementById('bottomHash').textContent=formatHash(d.networkhashps);
+    if(d.btcPrice>0){document.getElementById('btcPrice').textContent='$'+d.btcPrice.toLocaleString();}if(d.ethPrice>0){document.getElementById('ethPrice').textContent='$'+d.ethPrice.toLocaleString();}if(d.xmrPrice>0){document.getElementById('xmrPrice').textContent='$'+d.xmrPrice.toLocaleString();}if(d.dogePrice>0){document.getElementById('dogePrice').textContent='$'+d.dogePrice.toLocaleString();}if(d.btcEur>0){document.getElementById('btcPriceEur').textContent='€'+d.btcEur.toLocaleString();}if(d.ethEur>0){document.getElementById('ethPriceEur').textContent='€'+d.ethEur.toLocaleString();}if(d.xmrEur>0){document.getElementById('xmrPriceEur').textContent='€'+d.xmrEur.toLocaleString();}if(d.dogeEur>0){document.getElementById('dogePriceEur').textContent='€'+d.dogeEur.toLocaleString();}document.getElementById('syncText').textContent='Synced — Block '+d.blocks;
+    document.getElementById('balanceAddress').textContent='Connected to the Gaelium Core Network (GAEL)';
+    const txs = await window.gaelium.listTransactions(30);
+    if (!txs.error && txs.length>0) {
+      lastTxList=filterChangeTx(txs.reverse().filter(tx=>tx.txid!=='9280011d752efed0c25a1d8a3fbd5d9ba50b953cac65f994b9d95437c9be6cfe')); let h=''; lastTxList.slice(0,8).forEach(tx => h+=buildTxItem(tx));
+      document.getElementById('txList').innerHTML=h;
+    } else { document.getElementById('txList').innerHTML='<div class="loading">No transactions yet</div>'; }
+  } catch(e) { document.getElementById('balanceAddress').textContent='Connecting to daemon...'; }
+}
+async function loadReceiveAddress() {
+  try {
+    // Show last existing address, don't create a new one each time
+    const addrs = await window.gaelium.listReceivedByAddress();
+    if (addrs && Array.isArray(addrs) && addrs.length > 0) {
+      // Take the last address (most recently created)
+      const last = addrs[addrs.length - 1];
+      document.getElementById('receiveAddress').textContent = last.address;
+    } else {
+      // No addresses at all — create the first one
+      const a = await window.gaelium.getNewAddress('default');
+      if (!a.error) document.getElementById('receiveAddress').textContent = a;
+    }
+  } catch(e) {}
+}
+function copyAddress() {
+  navigator.clipboard.writeText(document.getElementById('receiveAddress').textContent);
+  const s=document.getElementById('receiveStatus');
+  s.className='status-msg success'; s.textContent='Address copied!';
+  setTimeout(()=>s.className='status-msg',3000);
+}
+async function generateNewAddress() {
+  try {
+    const label = document.getElementById('newAddrLabel').value.trim();
+    const a = await window.gaelium.getNewAddress(label);
+    if (!a.error) {
+      document.getElementById('receiveAddress').textContent=a;
+      document.getElementById('newAddrLabel').value='';
+      // Add to top of ordered list
+      const meta = await window.gaelium.loadAddressMeta();
+      const order = meta.order || [];
+      if (!order.includes(a)) order.unshift(a);
+      meta.order = order;
+      await window.gaelium.saveAddressMeta(meta);
+      const s=document.getElementById('receiveStatus');
+      s.className='status-msg success'; s.textContent='New address generated!';
+      setTimeout(()=>s.className='status-msg',3000);
+      loadAddressHistory();
+    }
+  } catch(e) {}
+}
+async function loadAddressHistory() {
+  try {
+    const addrs = await window.gaelium.listReceivedByAddress();
+    if (addrs.error || !Array.isArray(addrs)) return;
+    const container = document.getElementById('addressHistory');
+    if (addrs.length === 0) { container.innerHTML='<div style="color:var(--text-muted);font-size:13px;">No addresses yet.</div>'; return; }
+    let html = '';
+    addrs.reverse();
+    addrs.forEach(a => {
+      const label = a.label || a.account || '';
+      const safeLabel = escapeHtml(label);
+      const labelDisplay = label ? '<span style="color:var(--green-light);font-weight:600;">'+safeLabel+'</span> — ' : '';
+      const addr = a.address;
+      const safeAddr = escapeHtml(addr);
+      const sa = addr.length>34 ? addr.substring(0,16)+'...'+addr.substring(addr.length-8) : addr;
+      const safeSa = escapeHtml(sa);
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;" data-copy-addr="'+safeAddr+'">';
+      html += '<div style="flex:1;min-width:0;"><div style="font-size:13px;">'+labelDisplay+'<span style="font-family:JetBrains Mono,monospace;color:var(--text-secondary);font-size:12px;">'+safeSa+'</span></div>';
+      html += '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;"><span class="copy-hint">Click to copy</span></div></div></div>';
+    });
+    // Attach copy handlers via event delegation
+    container.querySelectorAll('[data-copy-addr]').forEach(el => {
+      el.addEventListener('click', function() {
+        navigator.clipboard.writeText(this.dataset.copyAddr);
+        const hint = this.querySelector('span.copy-hint');
+        if (hint) { hint.textContent='Copied!'; setTimeout(()=>hint.textContent='Click to copy',2000); }
+      });
+    });
+    container.innerHTML=html;
+  } catch(e) { console.error('loadAddressHistory error:', e); }
+}
+async function importPrivateKey() {
+      const key = document.getElementById('importKeyInput').value.trim();
+      const label = document.getElementById('importKeyLabel').value.trim();
+      const rescan = document.getElementById('importRescan').checked;
+      const status = document.getElementById('importStatus');
+      
+      if (!key) {
+        status.style.display = 'block';
+        status.style.background = 'var(--red-soft)';
+        status.style.color = 'var(--red)';
+        status.textContent = 'Please enter a private key';
+        return;
+      }
+      
+      status.style.display = 'block';
+      status.style.background = 'var(--green-soft)';
+      status.style.color = 'var(--green-light)';
+      status.textContent = rescan ? 'Importing and rescanning blockchain... This may take a few minutes.' : 'Importing key...';
+      
+      try {
+        const result = await window.gaelium.importPrivKey(key, label, rescan);
+        if (result && result.error) {
+          status.style.background = 'var(--red-soft)';
+          status.style.color = 'var(--red)';
+          status.textContent = 'Error: ' + result.error;
+        } else {
+          status.style.background = 'var(--green-soft)';
+          status.style.color = 'var(--green-light)';
+          status.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Private key imported successfully!';
+          document.getElementById('importKeyInput').value = '';
+          document.getElementById('importKeyLabel').value = '';
+          updateDashboard();
+        }
+      } catch(e) {
+        status.style.background = 'var(--red-soft)';
+        status.style.color = 'var(--red)';
+        status.textContent = 'Error: ' + String(e);
+      }
+    }
+async function exportPrivateKey() {
+  const addr = document.getElementById('exportAddress').value.trim();
+  const status = document.getElementById('exportResult');
+  if (!addr) {
+    status.style.display='block'; status.style.background='var(--red-soft)'; status.style.color='var(--red)';
+    status.textContent='Please enter a Gaelium address.'; return;
+  }
+  status.style.display='block'; status.style.background='var(--green-soft)'; status.style.color='var(--green-light)';
+  status.textContent='Retrieving private key...';
+  try {
+    const result = await window.gaelium.dumpPrivKey(addr);
+    if (result && result.error) {
+      status.style.background='var(--red-soft)'; status.style.color='var(--red)';
+      if (result.error.includes('not known') || result.error.includes('not found')) {
+        status.textContent='Error: This address is not in your wallet.';
+      } else {
+        status.textContent='Error: ' + result.error;
+      }
+    } else {
+      status.style.background='rgba(240,180,41,0.1)'; status.style.color='var(--yellow)';
+      status.innerHTML='<strong>Private Key:</strong><br><span id="exportedKeyValue" style="font-family:JetBrains Mono,monospace;word-break:break-all;font-size:12px;user-select:all;"></span><br><br><em style="font-size:11px;">Copy this key and store it safely. It will be cleared in 60 seconds.</em>';
+      document.getElementById('exportedKeyValue').textContent=result;
+      // Auto-clear private key from DOM after 60 seconds
+      setTimeout(()=>{ const el=document.getElementById('exportedKeyValue'); if(el) el.textContent='[cleared]'; },60000);
+    }
+  } catch(e) {
+    status.style.background='var(--red-soft)'; status.style.color='var(--red)';
+    status.textContent='Error: ' + String(e);
+  }
+}
+
+    
+    var lastTxList = [];
+    function showTxDetail(txid) {
+      const tx = lastTxList.find(t=>t.txid===txid);
+      if(!tx) return;
+      let status = tx.category;
+      if(tx.category==='generate') status='Mined (Confirmed)';
+      if(tx.category==='immature') status='Immature (Pending Maturity)';
+      if(tx.category==='send') status='Sent';
+      if(tx.category==='receive') status='Received';
+      let rows = '';
+      rows+='<div class="tx-modal-row"><span class="tx-modal-label">Status</span><span class="tx-modal-value">'+escapeHtml(status)+'</span></div>';
+      rows+='<div class="tx-modal-row"><span class="tx-modal-label">Amount</span><span class="tx-modal-value" style="color:'+(tx.amount>=0?'var(--green-light)':'var(--red)')+'">'+escapeHtml(formatAmount(tx.amount))+' GAEL</span></div>';
+      if(tx.fee) rows+='<div class="tx-modal-row"><span class="tx-modal-label">Fee</span><span class="tx-modal-value">'+escapeHtml(tx.fee)+' GAEL</span></div>';
+      rows+='<div class="tx-modal-row"><span class="tx-modal-label">Address</span><span class="tx-modal-value">'+escapeHtml(tx.address||'N/A')+'</span></div>';
+      rows+='<div class="tx-modal-row"><span class="tx-modal-label">Transaction ID</span><span class="tx-modal-value" style="font-size:11px;">'+escapeHtml(tx.txid)+'</span></div>';
+      rows+='<div class="tx-modal-row"><span class="tx-modal-label">Confirmations</span><span class="tx-modal-value">'+escapeHtml(tx.confirmations||0)+'</span></div>';
+      if(tx.blockhash) rows+='<div class="tx-modal-row"><span class="tx-modal-label">Block Hash</span><span class="tx-modal-value" style="font-size:11px;">'+escapeHtml(tx.blockhash)+'</span></div>';
+      if(tx.blockheight) rows+='<div class="tx-modal-row"><span class="tx-modal-label">Block Height</span><span class="tx-modal-value">'+escapeHtml(tx.blockheight)+'</span></div>';
+      if(tx.time) rows+='<div class="tx-modal-row"><span class="tx-modal-label">Date</span><span class="tx-modal-value">'+escapeHtml(new Date(tx.time*1000).toLocaleString())+'</span></div>';
+      document.getElementById('txModalBody').innerHTML=rows;
+      document.getElementById('txModalTitle').textContent=status;
+      document.getElementById('txModal').classList.add('active');
+    }
+    function closeTxModal() { document.getElementById('txModal').classList.remove('active'); }
+
+    async function sendTransaction() {
+  const addr=document.getElementById('sendAddress').value.trim();
+  const amt=parseFloat(document.getElementById('sendAmount').value);
+  const st=document.getElementById('sendStatus');
+  const btn=document.getElementById('sendBtn');
+  if (!addr||!amt||amt<=0) { st.className='status-msg error'; st.textContent='Enter valid address and amount'; return; }
+  try {
+    const v=await window.gaelium.validateAddress(addr);
+    if (!v.isvalid) { st.className='status-msg error'; st.textContent='Invalid Gaelium address'; return; }
+  } catch(e) { st.className='status-msg error'; st.textContent='Could not validate address'; return; }
+  document.getElementById('confirmAmount').textContent=amt + ' GAEL';
+  document.getElementById('confirmAddress').textContent=addr;
+  document.getElementById('confirmFee').textContent='~0.003 GAEL';
+  document.getElementById('confirmTotal').textContent=(amt + 0.003).toFixed(3) + ' GAEL';
+  document.getElementById('confirmModal').classList.add('active');
+}
+async function fillMaxAmount() {
+  try {
+    const d = await window.gaelium.getBalance();
+    if (!d.error && d.balance > 0) {
+      const max = Math.max(0, d.balance - 0.01);
+      document.getElementById('sendAmount').value = max.toFixed(8);
+    }
+  } catch(e) {}
+}
+function cancelSend() {
+  document.getElementById('confirmModal').classList.remove('active');
+}
+async function confirmSend() {
+  document.getElementById('confirmModal').classList.remove('active');
+  const addr=document.getElementById('sendAddress').value.trim();
+  const amt=parseFloat(document.getElementById('sendAmount').value);
+  const st=document.getElementById('sendStatus');
+  const btn=document.getElementById('sendBtn');
+  btn.disabled=true; btn.textContent='Sending...';
+  try {
+    const tx=await window.gaelium.sendToAddress(addr,amt);
+    if (tx.error) { const errMsg = tx.error.message||tx.error; if (String(errMsg).includes('Insufficient') || String(errMsg).includes('Amount exceeds')) { st.className='status-msg error'; st.textContent='Insufficient funds. Remember to account for the network fee (~0.003 GAEL).'; } else { st.className='status-msg error'; st.textContent='Error: '+errMsg; } }
+    else {
+      st.className='status-msg success'; st.textContent='Sent! TxID: '+tx.substring(0,24)+'...';
+      document.getElementById('sendAddress').value='';
+      document.getElementById('sendAmount').value='';
+      updateDashboard();
+    }
+  } catch(e) { st.className='status-msg error'; st.textContent='Error: '+e.message; }
+  btn.disabled=false; btn.textContent='Send Transaction';
+}
+async function loadAllTransactions() {
+  try {
+    const txs=await window.gaelium.listTransactions(50);
+    if (!txs.error&&txs.length>0) {
+      lastTxList=filterChangeTx(txs.reverse().filter(tx=>tx.txid!=='9280011d752efed0c25a1d8a3fbd5d9ba50b953cac65f994b9d95437c9be6cfe')); let h=''; lastTxList.forEach(tx=>h+=buildTxItem(tx));
+      document.getElementById('txListFull').innerHTML=h;
+    } else if (!txs.error) {
+      document.getElementById('txListFull').innerHTML='<div style="text-align:center;padding:40px;color:var(--text-muted);font-size:14px;">No transactions found.</div>';
+    }
+  } catch(e) {}
+}
+// Event delegation for transaction clicks (avoids inline onclick with unsanitized txid)
+document.addEventListener('click', function(e) {
+  const txItem = e.target.closest('.tx-item[data-txid]');
+  if (txItem) showTxDetail(txItem.dataset.txid);
+});
+updateDashboard();
+setInterval(updateDashboard, 10000);
+</script>
+
+<div class="tx-modal-overlay" id="txModal" onclick="if(event.target===this)closeTxModal()">
+  <div class="tx-modal">
+    <div class="tx-modal-title"><span id="txModalTitle">Transaction Details</span><span class="tx-modal-close" onclick="closeTxModal()">✕</span></div>
+    <div id="txModalBody"></div>
+  </div>
+</div>
+<div class="tx-modal-overlay" id="confirmModal">
+  <div class="tx-modal" style="max-width:420px;">
+    <div class="tx-modal-title"><span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Confirm Transaction</span><span class="tx-modal-close" onclick="cancelSend()">✕</span></div>
+    <div style="padding:20px;">
+      <p style="color:var(--text-secondary);font-size:14px;margin-bottom:16px;">You are about to send:</p>
+      <div style="background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px;">
+        <div style="font-size:24px;font-weight:700;color:var(--green-light);margin-bottom:8px;" id="confirmAmount"></div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">To address:</div>
+        <div style="font-size:13px;color:var(--text-primary);font-family:JetBrains Mono,monospace;word-break:break-all;" id="confirmAddress"></div>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;"><span style="font-size:12px;color:var(--text-muted);">Network fee:</span><span style="font-size:12px;color:var(--text-secondary);" id="confirmFee"></span></div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px;"><span style="font-size:13px;color:var(--text-secondary);font-weight:600;">Total:</span><span style="font-size:13px;color:var(--green-light);font-weight:600;" id="confirmTotal"></span></div>
+      </div>
+      <p style="color:var(--red);font-size:12px;margin-bottom:20px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> This action cannot be undone. Please verify the address and amount carefully.</p>
+      <div style="display:flex;gap:10px;">
+        <button onclick="cancelSend()" style="flex:1;padding:14px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;color:var(--text-secondary);font-size:15px;font-weight:600;cursor:pointer;">Cancel</button>
+        <button onclick="confirmSend()" style="flex:1;padding:14px;background:linear-gradient(135deg,var(--green),var(--green-light));color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Confirm Send</button>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

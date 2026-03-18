@@ -1,0 +1,69 @@
+{
+  "name": "gaelium-wallet",
+  "version": "1.0.0",
+  "description": "Gaelium Wallet - The Decentralized Alternative to Digital Euro",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build-win": "electron-builder --win",
+    "build-linux": "electron-builder --linux",
+    "build-all": "electron-builder --win --linux"
+  },
+  "author": {
+    "name": "Gaelium Core",
+    "email": "contact@gaelium.io"
+  },
+  "license": "MIT",
+  "build": {
+    "appId": "io.gaelium.wallet",
+    "productName": "Gaelium Wallet",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        "portable",
+        "nsis"
+      ],
+      "icon": "src/assets/icon.ico"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "daemon/",
+        "to": "daemon/",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "linux": {
+      "target": ["AppImage", "deb", "rpm"],
+      "icon": "src/assets/icon.png",
+      "category": "Finance"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "src/assets/icon.ico",
+      "uninstallerIcon": "src/assets/icon.ico",
+      "installerHeaderIcon": "src/assets/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Gaelium Wallet",
+      "uninstallDisplayName": "Gaelium Wallet",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": true,
+      "include": "build/installer.nsh"
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "homepage": "https://gaelium.io"
+}

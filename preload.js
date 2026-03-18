@@ -1,0 +1,25 @@
+const { contextBridge, ipcRenderer } = require('electron');
+contextBridge.exposeInMainWorld('gaelium', {
+  minimize: () => ipcRenderer.send('window-minimize'),
+  maximize: () => ipcRenderer.send('window-maximize'),
+  close: () => ipcRenderer.send('window-close'),
+  getBalance: () => ipcRenderer.invoke('rpc-getbalance'),
+  listTransactions: (count) => ipcRenderer.invoke('rpc-listtransactions', count),
+  getNewAddress: (label) => ipcRenderer.invoke('rpc-getnewaddress', label),
+  sendToAddress: (address, amount) => ipcRenderer.invoke('rpc-sendtoaddress', address, amount),
+  validateAddress: (address) => ipcRenderer.invoke('rpc-validateaddress', address),
+  importPrivKey: (key, label, rescan) => ipcRenderer.invoke('rpc-importprivkey', key, label, rescan),
+  dumpPrivKey: (address) => ipcRenderer.invoke('rpc-dumpprivkey', address),
+  backupWallet: () => ipcRenderer.invoke('backup-wallet'),
+  encryptWallet: (passphrase) => ipcRenderer.invoke('rpc-encryptwallet', passphrase),
+  walletPassphrase: (passphrase, timeout) => ipcRenderer.invoke('rpc-walletpassphrase', passphrase, timeout),
+  walletLock: () => ipcRenderer.invoke('rpc-walletlock'),
+  getWalletInfo: () => ipcRenderer.invoke('rpc-getwalletinfo'),
+  walletPassphraseChange: (oldPass, newPass) => ipcRenderer.invoke('rpc-walletpassphrasechange', oldPass, newPass),
+  getMarketPrices: () => ipcRenderer.invoke('get-market-prices'),
+  listReceivedByAddress: () => ipcRenderer.invoke('rpc-listreceivedbyaddress'),
+  loadAddressMeta: () => ipcRenderer.invoke('load-address-meta'),
+  saveAddressMeta: (data) => ipcRenderer.invoke('save-address-meta', data),
+  restoreWallet: () => ipcRenderer.invoke('restore-wallet'),
+  onNavigateTo: (callback) => ipcRenderer.on('navigate-to', (event, page) => callback(page))
+});
