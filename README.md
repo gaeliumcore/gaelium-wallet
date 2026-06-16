@@ -57,7 +57,7 @@ npx electron-builder --mac
 - 📦 Main repo: https://github.com/gaeliumcore/Gaelium
 - 💬 Telegram: https://t.me/gaelium
 - 𝕏 Twitter/X: https://twitter.com/gaeliumcore
-- 💬 Discord: https://discord.gg/sCVbvKRD
+- 💬 Discord: https://discord.gg/FWYEwnwu3p
 
 ## License
 
