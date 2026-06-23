@@ -934,7 +934,7 @@ async function loadAddressHistory() {
       html += '<div style="flex:1;min-width:0;"><div style="font-size:13px;">'+labelDisplay+'<span style="font-family:JetBrains Mono,monospace;color:var(--text-secondary);font-size:12px;">'+safeSa+'</span></div>';
       html += '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;"><span class="copy-hint">Click to copy</span></div></div></div>';
     });
-    // Attach copy handlers via event delegation
+    container.innerHTML=html;
     container.querySelectorAll('[data-copy-addr]').forEach(el => {
       el.addEventListener('click', function() {
         navigator.clipboard.writeText(this.dataset.copyAddr);
@@ -942,7 +942,6 @@ async function loadAddressHistory() {
         if (hint) { hint.textContent='Copied!'; setTimeout(()=>hint.textContent='Click to copy',2000); }
       });
     });
-    container.innerHTML=html;
   } catch(e) { console.error('loadAddressHistory error:', e); }
 }
 async function importPrivateKey() {
