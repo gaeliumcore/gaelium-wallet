@@ -886,7 +886,7 @@ async function updateDashboard() {
     if (d.unconfirmed>0) pp.push('Pending: '+formatAmount(d.unconfirmed)+' GAEL');
     if (d.immature>0) pp.push('Immature: '+formatAmount(d.immature)+' GAEL');
     document.getElementById('balancePending').textContent=pp.join(' | ');
-    var syncing = d.initialblockdownload && d.headers > 0 && d.blocks < d.headers;
+    var syncing = d.headers > 0 && (d.headers - d.blocks) > 2;
     var blocksEl = document.getElementById('statBlocks');
     var rewardEl = document.getElementById('statReward');
     if (syncing) {
