@@ -365,9 +365,9 @@ ipcMain.handle('rpc-getbalance', async () => {
   }
 });
 
-ipcMain.handle('rpc-listtransactions', async (event, count) => {
+ipcMain.handle('rpc-listtransactions', async (event, count, skip) => {
   try {
-    return await rpcCall('listtransactions', ['*', count || 10]);
+    return await rpcCall('listtransactions', ['*', count || 10, skip || 0]);
   } catch (e) {
     return { error: e.message || String(e) };
   }

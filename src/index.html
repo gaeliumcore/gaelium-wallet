@@ -312,6 +312,17 @@ body {
 .tx-modal-row { display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--border); }
 .tx-modal-label { color:var(--text-muted); font-size:13px; }
 .tx-modal-value { color:var(--text-primary); user-select:text; -webkit-user-select:text; font-size:13px; font-family:JetBrains Mono,monospace; text-align:right; max-width:320px; word-break:break-all; }
+.pagination { display:flex; align-items:center; justify-content:center; gap:6px; margin-top:18px; padding:12px 0; }
+.page-btn {
+  min-width:36px; height:36px; border-radius:8px; border:1px solid var(--border);
+  background:var(--bg-card); color:var(--text-secondary); font-family:'Outfit',sans-serif;
+  font-size:13px; font-weight:500; cursor:pointer; transition:all 0.2s;
+  display:flex; align-items:center; justify-content:center;
+}
+.page-btn:hover:not(:disabled) { border-color:var(--border-active); color:var(--text-primary); background:var(--bg-card-hover); }
+.page-btn.active { background:var(--green); border-color:var(--green); color:white; }
+.page-btn:disabled { opacity:0.35; cursor:not-allowed; }
+.page-info { font-size:12px; color:var(--text-muted); margin-left:12px; }
 </style>
 </head>
 <body>
@@ -572,6 +583,7 @@ body {
     <div class="page" id="page-transactions">
       <div class="page-title">Transactions</div>
       <div class="tx-list" id="txListFull"><div class="loading">Loading transactions...</div></div>
+      <div id="txPagination" class="pagination" style="display:none;"></div>
     </div>
   </div>
 </div>
@@ -760,7 +772,7 @@ function navigateTo(page) {
   const exportResult = document.getElementById('exportResult');
   if (exportResult) exportResult.style.display='none';
   if (page === 'receive') { loadReceiveAddress(); loadAddressHistory(); }
-  if (page === 'transactions') loadAllTransactions();
+  if (page === 'transactions') loadAllTransactions(0);
   if (page === 'security') updateLockStatus();
 }
 if (window.gaelium.onNavigateTo) { window.gaelium.onNavigateTo((page) => {
@@ -1082,16 +1094,44 @@ async function confirmSend() {
   } catch(e) { st.className='status-msg error'; st.textContent='Error: '+e.message; }
   btn.disabled=false; btn.textContent='Send Transaction';
 }
-async function loadAllTransactions() {
+var txPageSize = 20;
+var txCurrentPage = 0;
+async function loadAllTransactions(page) {
+  if (typeof page === 'number') txCurrentPage = page;
+  var pg = txCurrentPage;
   try {
-    const txs=await window.gaelium.listTransactions(50);
-    if (!txs.error&&txs.length>0) {
-      lastTxList=filterChangeTx(txs.reverse().filter(tx=>tx.txid!=='9280011d752efed0c25a1d8a3fbd5d9ba50b953cac65f994b9d95437c9be6cfe')); let h=''; lastTxList.forEach(tx=>h+=buildTxItem(tx));
-      document.getElementById('txListFull').innerHTML=h;
+    // Fetch one extra to know if there is a next page
+    const txs = await window.gaelium.listTransactions(txPageSize + 1, pg * txPageSize);
+    if (!txs.error && txs.length > 0) {
+      var hasNext = txs.length > txPageSize;
+      var pageTxs = txs.slice(0, txPageSize);
+      lastTxList = filterChangeTx(pageTxs.reverse().filter(tx => tx.txid !== '9280011d752efed0c25a1d8a3fbd5d9ba50b953cac65f994b9d95437c9be6cfe'));
+      var h = '';
+      lastTxList.forEach(tx => h += buildTxItem(tx));
+      document.getElementById('txListFull').innerHTML = h;
+      renderTxPagination(pg, hasNext);
     } else if (!txs.error) {
-      document.getElementById('txListFull').innerHTML='<div style="text-align:center;padding:40px;color:var(--text-muted);font-size:14px;">No transactions found.</div>';
+      document.getElementById('txListFull').innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);font-size:14px;">No transactions found.</div>';
+      document.getElementById('txPagination').style.display = 'none';
     }
   } catch(e) {}
+}
+function renderTxPagination(page, hasNext) {
+  var el = document.getElementById('txPagination');
+  if (page === 0 && !hasNext) { el.style.display = 'none'; return; }
+  var h = '';
+  h += '<button class="page-btn" onclick="loadAllTransactions(0)"' + (page === 0 ? ' disabled' : '') + '>&laquo;</button>';
+  h += '<button class="page-btn" onclick="loadAllTransactions(' + (page - 1) + ')"' + (page === 0 ? ' disabled' : '') + '>&lsaquo; Prev</button>';
+  var start = Math.max(0, page - 2);
+  var end = page + 2;
+  for (var i = start; i <= end; i++) {
+    if (i > page && !hasNext) break;
+    h += '<button class="page-btn' + (i === page ? ' active' : '') + '" onclick="loadAllTransactions(' + i + ')">' + (i + 1) + '</button>';
+  }
+  h += '<button class="page-btn" onclick="loadAllTransactions(' + (page + 1) + ')"' + (!hasNext ? ' disabled' : '') + '>Next &rsaquo;</button>';
+  h += '<span class="page-info">Page ' + (page + 1) + '</span>';
+  el.innerHTML = h;
+  el.style.display = 'flex';
 }
 // Event delegation for transaction clicks (avoids inline onclick with unsanitized txid)
 document.addEventListener('click', function(e) {

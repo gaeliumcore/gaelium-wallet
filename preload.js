@@ -4,7 +4,7 @@ contextBridge.exposeInMainWorld('gaelium', {
   maximize: () => ipcRenderer.send('window-maximize'),
   close: () => ipcRenderer.send('window-close'),
   getBalance: () => ipcRenderer.invoke('rpc-getbalance'),
-  listTransactions: (count) => ipcRenderer.invoke('rpc-listtransactions', count),
+  listTransactions: (count, skip) => ipcRenderer.invoke('rpc-listtransactions', count, skip),
   getNewAddress: (label) => ipcRenderer.invoke('rpc-getnewaddress', label),
   sendToAddress: (address, amount) => ipcRenderer.invoke('rpc-sendtoaddress', address, amount),
   validateAddress: (address) => ipcRenderer.invoke('rpc-validateaddress', address),
