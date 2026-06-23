@@ -81,7 +81,11 @@ body {
 .sidebar-nav {
   flex: 1; padding: 12px 10px;
   display: flex; flex-direction: column; gap: 2px;
+  min-height: 0; overflow-y: auto;
 }
+.sidebar-nav::-webkit-scrollbar { width: 3px; }
+.sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+.sidebar-nav::-webkit-scrollbar-thumb { background: var(--border-active); border-radius: 3px; }
 .nav-item {
   display: flex; align-items: center; gap: 11px;
   padding: 11px 14px; border-radius: 10px;
