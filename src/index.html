@@ -470,10 +470,6 @@ body {
           <label style="display:block;font-size:13px;color:var(--text-secondary);margin-bottom:6px;">Label (optional)</label>
           <input type="text" id="importKeyLabel" placeholder="e.g. Premine, Mining rewards..." style="width:100%;padding:12px 16px;background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;" onfocus="this.style.borderColor='var(--green-light)'" onblur="this.style.borderColor='var(--border)'">
         </div>
-        <div style="margin-bottom:20px;display:flex;align-items:center;gap:8px;">
-          <input type="checkbox" id="importRescan" checked style="accent-color:var(--green-primary);width:16px;height:16px;">
-          <label for="importRescan" style="font-size:13px;color:var(--text-secondary);">Rescan blockchain (slower but finds all transactions)</label>
-        </div>
         <button onclick="importPrivateKey()" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--green-primary),var(--green-light));color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(13,181,132,0.35)'" onmouseout="this.style.transform='none';this.style.boxShadow='none'">⚿ Import Private Key</button>
         <div id="importStatus" style="margin-top:14px;padding:12px;border-radius:8px;font-size:13px;display:none;"></div>
         <div style="margin-top:16px;padding:14px;background:rgba(240,180,41,0.08);border:1px solid rgba(240,180,41,0.2);border-radius:10px;">
@@ -947,7 +943,6 @@ async function loadAddressHistory() {
 async function importPrivateKey() {
       const key = document.getElementById('importKeyInput').value.trim();
       const label = document.getElementById('importKeyLabel').value.trim();
-      const rescan = document.getElementById('importRescan').checked;
       const status = document.getElementById('importStatus');
       
       if (!key) {
@@ -961,10 +956,10 @@ async function importPrivateKey() {
       status.style.display = 'block';
       status.style.background = 'var(--green-soft)';
       status.style.color = 'var(--green-light)';
-      status.textContent = rescan ? 'Importing and rescanning blockchain... This may take a few minutes.' : 'Importing key...';
-      
+      status.textContent = 'Importing key and scanning blockchain... This may take a few minutes.';
+
       try {
-        const result = await window.gaelium.importPrivKey(key, label, rescan);
+        const result = await window.gaelium.importPrivKey(key, label, true);
         if (result && result.error) {
           status.style.background = 'var(--red-soft)';
           status.style.color = 'var(--red)';
