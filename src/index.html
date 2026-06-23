@@ -890,7 +890,7 @@ async function updateDashboard() {
     var blocksEl = document.getElementById('statBlocks');
     var rewardEl = document.getElementById('statReward');
     if (syncing) {
-      var pct = Math.min(99.9, (d.verificationprogress * 100)).toFixed(1);
+      var pct = Math.min(99.9, ((d.blocks / d.headers) * 100)).toFixed(1);
       blocksEl.textContent = d.blocks.toLocaleString() + ' / ' + d.headers.toLocaleString();
       rewardEl.innerHTML = '<div class="sync-progress-bar"><div class="sync-progress-fill" style="width:' + pct + '%"></div></div>';
       document.getElementById('syncText').textContent = 'Syncing ' + d.blocks.toLocaleString() + ' / ' + d.headers.toLocaleString() + ' (' + pct + '%)';
