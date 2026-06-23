@@ -356,6 +356,9 @@ ipcMain.handle('rpc-getbalance', async () => {
       unconfirmed: unconfirmed,
       immature: walletInfo.immature_balance || 0,
       blocks: info.blocks,
+      headers: info.headers,
+      verificationprogress: info.verificationprogress,
+      initialblockdownload: info.initialblockdownload,
       connections: networkInfo.connections,
       networkhashps: miningInfo.networkhashps,
       difficulty: miningInfo.difficulty

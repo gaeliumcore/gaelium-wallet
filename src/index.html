@@ -323,6 +323,8 @@ body {
 .page-btn.active { background:var(--green); border-color:var(--green); color:white; }
 .page-btn:disabled { opacity:0.35; cursor:not-allowed; }
 .page-info { font-size:12px; color:var(--text-muted); margin-left:12px; }
+.sync-progress-bar { width:100%; height:6px; background:rgba(255,255,255,0.06); border-radius:3px; margin-top:8px; overflow:hidden; }
+.sync-progress-fill { height:100%; background:linear-gradient(90deg, var(--green), var(--green-light)); border-radius:3px; transition:width 0.8s ease; }
 </style>
 </head>
 <body>
@@ -856,24 +858,57 @@ function buildTxItem(tx) {
   return '<div class="tx-item" style="cursor:pointer" data-txid="'+safeTxid+'"><div class="tx-icon-wrap '+escapeHtml(tc)+'">'+icon+'</div><div class="tx-details"><div class="tx-type">'+safeTl+'</div><div class="tx-address">'+safeSa+'</div></div><div class="tx-right"><div class="tx-amount '+(tx.amount<0?'negative':'positive')+'">'+safeAmt+' GAEL</div><div class="tx-date">'+safeDate+'</div><span class="tx-conf">'+safeConf+' conf.</span></div></div>';
 }
 let _startupAttempts = 0;
+function getStartupPhase(errorMsg) {
+  var m = String(errorMsg).toLowerCase();
+  if (m.includes('loading wallet')) return 'Loading wallet...';
+  if (m.includes('loading block')) return 'Loading block index...';
+  if (m.includes('verifying')) return 'Verifying blocks...';
+  if (m.includes('loading') || m.includes('rewinding') || m.includes('rescanning')) return 'Loading...';
+  return 'Starting Gaelium Core...';
+}
 async function updateDashboard() {
   try {
     const d = await window.gaelium.getBalance();
-    if (d.error) { _startupAttempts++; if (_startupAttempts < 12) { document.getElementById('balanceAddress').textContent='Starting Gaelium Wallet, please wait...'; } else { document.getElementById('balanceAddress').textContent='Unable to connect to Gaelium daemon. Please restart the wallet or check your firewall settings.'; } return; } _startupAttempts = 0;
+    if (d.error) {
+      _startupAttempts++;
+      var phase = getStartupPhase(d.error);
+      document.getElementById('syncText').textContent = phase;
+      if (_startupAttempts < 30) {
+        document.getElementById('balanceAddress').textContent = phase;
+      } else {
+        document.getElementById('balanceAddress').textContent = 'Unable to connect to Gaelium daemon. Please restart the wallet or check your firewall settings.';
+      }
+      return;
+    }
+    _startupAttempts = 0;
     document.getElementById('balanceAmount').innerHTML=formatAmount(d.balance)+'<span class="balance-currency"> GAEL</span>';
     let pp=[];
     if (d.unconfirmed>0) pp.push('Pending: '+formatAmount(d.unconfirmed)+' GAEL');
     if (d.immature>0) pp.push('Immature: '+formatAmount(d.immature)+' GAEL');
     document.getElementById('balancePending').textContent=pp.join(' | ');
-    document.getElementById('statBlocks').textContent=d.blocks.toLocaleString();
+    var syncing = d.initialblockdownload && d.headers > 0 && d.blocks < d.headers;
+    var blocksEl = document.getElementById('statBlocks');
+    var rewardEl = document.getElementById('statReward');
+    if (syncing) {
+      var pct = Math.min(99.9, (d.verificationprogress * 100)).toFixed(1);
+      blocksEl.textContent = d.blocks.toLocaleString() + ' / ' + d.headers.toLocaleString();
+      rewardEl.innerHTML = '<div class="sync-progress-bar"><div class="sync-progress-fill" style="width:' + pct + '%"></div></div>';
+      document.getElementById('syncText').textContent = 'Syncing ' + d.blocks.toLocaleString() + ' / ' + d.headers.toLocaleString() + ' (' + pct + '%)';
+      document.getElementById('bottomBlock').textContent = d.blocks.toLocaleString() + ' / ' + d.headers.toLocaleString();
+      document.getElementById('balanceAddress').textContent = 'Synchronizing with the Gaelium network (' + pct + '%)...';
+    } else {
+      blocksEl.textContent = d.blocks.toLocaleString();
+      rewardEl.textContent = 'Reward: 1,000 GAEL';
+      document.getElementById('syncText').textContent = 'Synced \u2014 Block ' + d.blocks;
+      document.getElementById('bottomBlock').textContent = d.blocks;
+      document.getElementById('balanceAddress').textContent = 'Connected to the Gaelium Core Network (GAEL)';
+    }
     document.getElementById('statHash').textContent=formatHash(d.networkhashps);
     document.getElementById('statPeers').textContent=d.connections;
     document.getElementById('statDiff').textContent='Diff: '+parseFloat(d.difficulty).toFixed(4);
     document.getElementById('bottomPeers').textContent=d.connections;
-    document.getElementById('bottomBlock').textContent=d.blocks;
     document.getElementById('bottomHash').textContent=formatHash(d.networkhashps);
-    if(d.btcPrice>0){document.getElementById('btcPrice').textContent='$'+d.btcPrice.toLocaleString();}if(d.ethPrice>0){document.getElementById('ethPrice').textContent='$'+d.ethPrice.toLocaleString();}if(d.xmrPrice>0){document.getElementById('xmrPrice').textContent='$'+d.xmrPrice.toLocaleString();}if(d.dogePrice>0){document.getElementById('dogePrice').textContent='$'+d.dogePrice.toLocaleString();}if(d.btcEur>0){document.getElementById('btcPriceEur').textContent='€'+d.btcEur.toLocaleString();}if(d.ethEur>0){document.getElementById('ethPriceEur').textContent='€'+d.ethEur.toLocaleString();}if(d.xmrEur>0){document.getElementById('xmrPriceEur').textContent='€'+d.xmrEur.toLocaleString();}if(d.dogeEur>0){document.getElementById('dogePriceEur').textContent='€'+d.dogeEur.toLocaleString();}document.getElementById('syncText').textContent='Synced — Block '+d.blocks;
-    document.getElementById('balanceAddress').textContent='Connected to the Gaelium Core Network (GAEL)';
+    if(d.btcPrice>0){document.getElementById('btcPrice').textContent='$'+d.btcPrice.toLocaleString();}if(d.ethPrice>0){document.getElementById('ethPrice').textContent='$'+d.ethPrice.toLocaleString();}if(d.xmrPrice>0){document.getElementById('xmrPrice').textContent='$'+d.xmrPrice.toLocaleString();}if(d.dogePrice>0){document.getElementById('dogePrice').textContent='$'+d.dogePrice.toLocaleString();}if(d.btcEur>0){document.getElementById('btcPriceEur').textContent='€'+d.btcEur.toLocaleString();}if(d.ethEur>0){document.getElementById('ethPriceEur').textContent='€'+d.ethEur.toLocaleString();}if(d.xmrEur>0){document.getElementById('xmrPriceEur').textContent='€'+d.xmrEur.toLocaleString();}if(d.dogeEur>0){document.getElementById('dogePriceEur').textContent='€'+d.dogeEur.toLocaleString();}
     const txs = await window.gaelium.listTransactions(30);
     if (!txs.error && txs.length>0) {
       lastTxList=filterChangeTx(txs.reverse().filter(tx=>tx.txid!=='9280011d752efed0c25a1d8a3fbd5d9ba50b953cac65f994b9d95437c9be6cfe')); let h=''; lastTxList.slice(0,8).forEach(tx => h+=buildTxItem(tx));
