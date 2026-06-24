@@ -115,18 +115,24 @@ function startDaemon() {
   });
 }
 
-// Stop the daemon gracefully
+// Stop the daemon gracefully and wait for it to fully exit
 function stopDaemon() {
   return new Promise((resolve) => {
     if (!daemonProcess) { resolve(); return; }
-    
-    rpcCall('stop').then(() => {
-      setTimeout(resolve, 2000);
-    }).catch(() => {
-      if (daemonProcess) {
-        daemonProcess.kill();
-      }
+    const dp = daemonProcess;
+    if (dp.exitCode !== null) { daemonProcess = null; resolve(); return; }
+    const timeout = setTimeout(() => {
+      try { dp.kill('SIGKILL'); } catch(e) {}
+      daemonProcess = null;
       resolve();
+    }, 30000);
+    dp.once('exit', () => {
+      clearTimeout(timeout);
+      daemonProcess = null;
+      resolve();
+    });
+    rpcCall('stop').catch(() => {
+      try { dp.kill(); } catch(e) {}
     });
   });
 }
@@ -445,10 +451,16 @@ ipcMain.handle('rpc-encryptwallet', async (event, passphrase) => {
   } catch (e) {
     // encryptwallet always errors because daemon shuts down - this is normal
   }
-  // Stop daemon cleanly
-  try { if (daemonProcess) daemonProcess.kill(); } catch(e) {}
-  daemonProcess = null;
-  await new Promise(r => setTimeout(r, 2000));
+  // Wait for daemon to finish its shutdown (encryptwallet triggers auto-shutdown)
+  if (daemonProcess) {
+    await new Promise((resolve) => {
+      const dp = daemonProcess;
+      if (!dp || dp.exitCode !== null) { daemonProcess = null; resolve(); return; }
+      const timeout = setTimeout(() => { try { dp.kill('SIGKILL'); } catch(e) {} resolve(); }, 30000);
+      dp.once('exit', () => { clearTimeout(timeout); resolve(); });
+    });
+    daemonProcess = null;
+  }
   // Relaunch: use original portable exe if available
   const execPath = process.env.PORTABLE_EXECUTABLE_FILE || process.env.APPIMAGE || process.execPath;
   const { spawn: spawnProc } = require('child_process');
@@ -562,7 +574,7 @@ ipcMain.handle('restore-wallet', async () => {
     try { await rpcCall('stop'); } catch(e) {}
     if (daemonProcess) {
       await new Promise((resolve) => {
-        const timeout = setTimeout(() => { try { daemonProcess.kill('SIGKILL'); } catch(e) {} resolve(); }, 5000);
+        const timeout = setTimeout(() => { try { daemonProcess.kill('SIGKILL'); } catch(e) {} resolve(); }, 30000);
         daemonProcess.once('exit', () => { clearTimeout(timeout); resolve(); });
       });
     }

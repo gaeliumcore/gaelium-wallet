@@ -8,6 +8,7 @@
 - [W4] Windows: add pagination to Transactions page (20 items per page, server-side via RPC skip)
 - [W5] Windows: clearer startup phases + visible sync progress indicator (sync detection via headers-blocks delta; progress percentage via blocks/headers ratio)
 - [W6] Windows: Security and Keys pages use full width with multi-column layout on wide screens
+- [W8] Windows: wait for daemon to fully exit before quitting (fixes chain rescan on every restart)
 
 ## v1.0.0 (2026-06-15)
 
