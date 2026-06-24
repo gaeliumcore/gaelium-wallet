@@ -1,15 +1,27 @@
-# Dependencies
+# Dependencies regenerables
 node_modules/
-
-# Build output
 dist/
 
-# Daemon binaries
-daemon/
+# Daemon binaries (publies via gaelium.io, pas via GitHub)
+daemon/gaeliumd
+daemon/gaeliumd.exe
+daemon/gaelium-cli
+daemon/gaelium-cli.exe
+daemon-linux/
+
+# Backups locaux
+*.bak.*
+*.bak
+*.bak_*
 
 # OS files
 .DS_Store
 Thumbs.db
 
-# Logs
-*.log
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Documentation interne dev N1 (jamais sur GitHub public)
+README-dev-n1.md

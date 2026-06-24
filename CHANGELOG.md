@@ -9,6 +9,7 @@
 - [W5] Windows: clearer startup phases + visible sync progress indicator (sync detection via headers-blocks delta; progress percentage via blocks/headers ratio)
 - [W6] Windows: Security and Keys pages use full width with multi-column layout on wide screens
 - [W8] Windows: wait for daemon to fully exit before quitting (fixes chain rescan on every restart)
+- [SEC] Security hardening: sandbox enabled, execFileSync to prevent shell injection, exec path captured at startup, backup files excluded from packaging
 
 ## v1.0.0 (2026-06-15)
 

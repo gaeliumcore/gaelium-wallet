@@ -30,7 +30,8 @@
     "files": [
       "main.js",
       "preload.js",
-      "src/**/*"
+      "src/**/*",
+      "!**/*.bak*"
     ],
     "extraResources": [
       {

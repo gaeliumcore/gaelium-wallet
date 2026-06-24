@@ -7,7 +7,10 @@ const path = require('path');
 const electronDataDir = process.platform === 'win32' ? path.join(require('os').homedir(), 'AppData', 'Roaming', 'Gaelium', 'electron') : path.join(require('os').homedir(), '.gaelium', 'electron');
 app.setPath('userData', electronDataDir);
 const fs = require('fs');
-const { spawn } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
+
+// Capture exec path at startup before env can be tampered with
+const SELF_EXEC_PATH = process.env.PORTABLE_EXECUTABLE_FILE || process.env.APPIMAGE || process.execPath;
 
 // RPC Config
 const RPC_USER = 'gaelrpc';
@@ -190,6 +193,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
       preload: path.join(__dirname, 'preload.js')
     }
   });
@@ -268,8 +272,7 @@ StartupWMClass=gaelium-wallet
       fs.writeFileSync(desktopFile, desktopEntry);
       fs.chmodSync(desktopFile, '755');
       // Update desktop database
-      const { execSync } = require('child_process');
-      try { execSync('update-desktop-database ' + appDir); } catch(e) {}
+      try { execFileSync('update-desktop-database', [appDir]); } catch(e) {}
     } catch(e) { console.log('Could not create menu entry:', e); }
   }
 }
@@ -462,7 +465,7 @@ ipcMain.handle('rpc-encryptwallet', async (event, passphrase) => {
     daemonProcess = null;
   }
   // Relaunch: use original portable exe if available
-  const execPath = process.env.PORTABLE_EXECUTABLE_FILE || process.env.APPIMAGE || process.execPath;
+  const execPath = SELF_EXEC_PATH;
   const { spawn: spawnProc } = require('child_process');
   // Spawn detached so it survives our exit
   const child = spawnProc(execPath, ['--navigate=security'], {
@@ -580,7 +583,7 @@ ipcMain.handle('restore-wallet', async () => {
     }
     daemonProcess = null;
     // Relaunch: same method as encrypt (spawn + exit)
-    const execPath = process.env.PORTABLE_EXECUTABLE_FILE || process.env.APPIMAGE || process.execPath;
+    const execPath = SELF_EXEC_PATH;
     const { spawn: spawnProc } = require('child_process');
     const child = spawnProc(execPath, ['--navigate=security'], {
       detached: true,
