@@ -1,7 +1,7 @@
 # Gaelium Wallet
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Version](https://img.shields.io/badge/version-1.0.0-orange.svg)
+![Version](https://img.shields.io/badge/version-1.0.1-orange.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)
 
 > Gaelium (GAEL) desktop wallet — Windows, Linux, macOS.
@@ -21,17 +21,17 @@ Built with Electron, supports Windows, Linux and macOS.
 
 ## Downloads
 
-Latest release: [v1.0.0](https://github.com/gaeliumcore/Gaelium/releases/tag/v1.0.0)
+Latest release: [v1.0.1](https://github.com/gaeliumcore/Gaelium/releases/tag/v1.0.1)
 
 | Platform | File |
 |----------|------|
-| Windows | Gaelium Wallet Setup 1.0.0.exe (installer) |
-| Windows | Gaelium Wallet 1.0.0.exe (portable) |
-| Linux | GaeliumWallet-1.0.0.AppImage |
-| Linux | gaelium-wallet_1.0.0_amd64.deb |
-| Linux | gaelium-wallet-1.0.0.x86_64.rpm |
-| macOS | Gaelium Wallet-1.0.0.dmg |
-| macOS | Gaelium Wallet-1.0.0-mac.zip |
+| Windows | Gaelium Wallet Setup 1.0.1.exe (installer) |
+| Windows | Gaelium Wallet 1.0.1.exe (portable) |
+| Linux | GaeliumWallet-1.0.1.AppImage |
+| Linux | gaelium-wallet_1.0.1_amd64.deb |
+| Linux | gaelium-wallet-1.0.1.x86_64.rpm |
+| macOS | Gaelium Wallet-1.0.1.dmg |
+| macOS | Gaelium Wallet-1.0.1-mac.zip |
 
 ## Build from source
 ```bash

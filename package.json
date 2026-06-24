@@ -1,6 +1,6 @@
 {
   "name": "gaelium-wallet",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Gaelium Wallet - The Decentralized Alternative to Digital Euro",
   "main": "main.js",
   "scripts": {
