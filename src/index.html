@@ -325,6 +325,9 @@ body {
 .page-info { font-size:12px; color:var(--text-muted); margin-left:12px; }
 .sync-progress-bar { width:100%; height:6px; background:rgba(255,255,255,0.06); border-radius:3px; margin-top:8px; overflow:hidden; }
 .sync-progress-fill { height:100%; background:linear-gradient(90deg, var(--green), var(--green-light)); border-radius:3px; transition:width 0.8s ease; }
+.cards-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+.cards-grid > * { min-width:0; }
+@media (max-width:960px) { .cards-grid { grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
@@ -460,7 +463,7 @@ body {
         <div class="receive-address" id="receiveAddress">Loading...</div>
         <button class="copy-btn" onclick="copyAddress()">Copy Address</button>
       </div>
-      <div style="margin-top:16px;max-width:550px;">
+      <div style="margin-top:16px;">
         <label style="display:block;font-size:13px;color:var(--text-secondary);margin-bottom:6px;">Label (optional)</label>
         <input type="text" id="newAddrLabel" placeholder="e.g. Mining, Donation, Payment..." style="width:100%;padding:12px 16px;background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor='var(--green-light)'" onblur="this.style.borderColor='var(--border)'">
       </div>
@@ -474,7 +477,8 @@ body {
 
     <div class="page" id="page-import">
       <h2 style="margin-bottom:20px;font-size:20px;">Import / Export Private Key</h2>
-      <div style="background:var(--bg-card);border-radius:14px;padding:24px;border:1px solid var(--border);max-width:550px;">
+      <div class="cards-grid">
+      <div style="background:var(--bg-card);border-radius:14px;padding:24px;border:1px solid var(--border);">
         <div style="margin-bottom:16px;">
           <label style="display:block;font-size:13px;color:var(--text-secondary);margin-bottom:6px;">Private Key</label>
           <input type="password" id="importKeyInput" placeholder="Enter your private key..." style="width:100%;padding:12px 16px;background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;color:var(--text-primary);font-family:JetBrains Mono,monospace;font-size:13px;outline:none;" onfocus="this.style.borderColor='var(--green-light)'" onblur="this.style.borderColor='var(--border)'">
@@ -490,7 +494,7 @@ body {
           <div style="font-size:12px;color:var(--text-secondary);line-height:1.5;">Never share your private key with anyone. With rescan enabled, the wallet may freeze for a few minutes while scanning the blockchain.</div>
         </div>
       </div>
-      <div style="background:var(--bg-card);border-radius:14px;padding:24px;border:1px solid var(--border);max-width:550px;margin-top:20px;">
+      <div style="background:var(--bg-card);border-radius:14px;padding:24px;border:1px solid var(--border);">
         <h3 style="font-size:16px;margin-bottom:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Export Private Key</h3>
         <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">Enter a Gaelium address from your wallet to reveal its private key.</p>
         <div style="margin-bottom:16px;">
@@ -504,11 +508,12 @@ body {
           <div style="font-size:12px;color:var(--text-secondary);line-height:1.5;">Your private key gives full access to your funds. Never share it. Store it safely offline.</div>
         </div>
       </div>
+      </div>
     </div>
     <div class="page" id="page-security">
       <h2 style="font-size:20px;margin-bottom:20px;">Wallet Security</h2>
       <!-- ENCRYPT SECTION (shown only when wallet is NOT encrypted) -->
-      <div id="secEncrypt" style="display:none;background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px;max-width:550px;">
+      <div id="secEncrypt" style="display:none;background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px;">
         <h3 style="font-size:16px;margin-bottom:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> Encrypt Wallet</h3>
         <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">Encrypt your wallet with a passphrase. This protects your funds if someone copies your wallet file. <strong style="color:var(--red);">Warning: If you lose your passphrase, you lose access to your funds!</strong></p>
         <div style="margin-bottom:12px;">
@@ -522,8 +527,9 @@ body {
         <button onclick="encryptWallet()" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--green),var(--green-light));color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(13,181,132,0.35)'" onmouseout="this.style.transform='none';this.style.boxShadow='none'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> Encrypt Wallet</button>
         <div id="encryptStatus" style="margin-top:14px;padding:12px;border-radius:8px;font-size:13px;display:none;"></div>
       </div>
+      <div id="secEncryptedGrid" class="cards-grid" style="display:none;margin-bottom:20px;">
       <!-- CHANGE PASSWORD SECTION (shown only when wallet IS encrypted) -->
-      <div id="secChangePass" style="display:none;background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px;max-width:550px;">
+      <div id="secChangePass" style="background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;">
         <h3 style="font-size:16px;margin-bottom:6px;">⚿ Change Passphrase</h3>
         <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">Change your wallet encryption passphrase.</p>
         <div style="margin-bottom:12px;">
@@ -542,7 +548,7 @@ body {
         <div id="changePassStatus" style="margin-top:14px;padding:12px;border-radius:8px;font-size:13px;display:none;"></div>
       </div>
       <!-- UNLOCK / LOCK SECTION (shown only when wallet IS encrypted) -->
-      <div id="secUnlock" style="display:none;background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px;max-width:550px;">
+      <div id="secUnlock" style="background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;">
         <h3 style="font-size:16px;margin-bottom:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 019.9-1"/></svg> Unlock / Lock Wallet</h3>
         <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">Unlock your wallet to send transactions. It will auto-lock after the timeout.</p>
         <div style="margin-bottom:12px;">
@@ -559,19 +565,21 @@ body {
         </div>
         <div id="unlockStatus" style="margin-top:14px;padding:12px;border-radius:8px;font-size:13px;display:none;"></div>
       </div>
-      <!-- STATUS SECTION (always shown) -->
-      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:550px;">
+      </div>
+      <!-- STATUS + BACKUP + RESTORE (always shown) -->
+      <div class="cards-grid" style="margin-bottom:20px;">
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;">
         <h3 style="font-size:16px;margin-bottom:10px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> Encryption Status</h3>
         <div id="lockStatus" style="color:var(--text-secondary);font-size:14px;">Checking...</div>
       </div>
       <!-- BACKUP SECTION (always shown) -->
-      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:550px;margin-top:20px;">
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;">
         <h3 style="font-size:16px;margin-bottom:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Backup Wallet</h3>
         <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">Save a copy of your wallet file to a safe location. This backup contains all your private keys and addresses.</p>
         <button onclick="backupWallet()" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--green),var(--green-light));color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(13,181,132,0.35)'" onmouseout="this.style.transform='none';this.style.boxShadow='none'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Backup Wallet</button>
         <div id="backupStatus" style="margin-top:14px;padding:12px;border-radius:8px;font-size:13px;display:none;"></div>
       </div>
-      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:550px;margin-top:20px;">
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;">
         <h3 style="font-size:16px;margin-bottom:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Restore Wallet</h3>
         <p style="color:var(--text-muted);font-size:13px;margin-bottom:12px;">Restore your wallet from a previous backup file. The wallet will restart after restoration.</p>
         <div style="padding:12px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:10px;margin-bottom:16px;">
@@ -580,6 +588,7 @@ body {
         </div>
         <button onclick="restoreWallet()" style="width:100%;padding:14px;background:linear-gradient(135deg,#e67e22,#f39c12);color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(230,126,34,0.35)'" onmouseout="this.style.transform='none';this.style.boxShadow='none'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Restore from Backup</button>
         <div id="restoreStatus" style="margin-top:14px;padding:12px;border-radius:8px;font-size:13px;display:none;"></div>
+      </div>
       </div>
     </div>
     <div class="page" id="page-transactions">
@@ -748,8 +757,7 @@ async function updateSecurityPage() {
     const isEncrypted = info && typeof info.unlocked_until !== 'undefined';
     // Show/hide sections based on encryption state
     document.getElementById('secEncrypt').style.display = isEncrypted ? 'none' : 'block';
-    document.getElementById('secChangePass').style.display = isEncrypted ? 'block' : 'none';
-    document.getElementById('secUnlock').style.display = isEncrypted ? 'block' : 'none';
+    document.getElementById('secEncryptedGrid').style.display = isEncrypted ? 'grid' : 'none';
     if (el) {
       if (!isEncrypted) {
         el.innerHTML = '<span style="color:var(--yellow);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Wallet is NOT encrypted.</span> Use the form above to protect it with a passphrase.';

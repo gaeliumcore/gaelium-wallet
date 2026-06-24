@@ -7,6 +7,7 @@
 - [W3] Windows: remove rescan checkbox, force rescan on all key imports (avoids corrupted balance state)
 - [W4] Windows: add pagination to Transactions page (20 items per page, server-side via RPC skip)
 - [W5] Windows: clearer startup phases + visible sync progress indicator (sync detection via headers-blocks delta; progress percentage via blocks/headers ratio)
+- [W6] Windows: Security and Keys pages use full width with multi-column layout on wide screens
 
 ## v1.0.0 (2026-06-15)
 
