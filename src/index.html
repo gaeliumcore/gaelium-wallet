@@ -115,6 +115,19 @@ body {
   animation: pulse 2s infinite;
 }
 @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
+@keyframes rebuildSpin { to { transform: rotate(360deg); } }
+.rebuild-banner {
+  display: none; align-items: flex-start; gap: 14px;
+  background: linear-gradient(135deg, rgba(56,128,200,0.12) 0%, rgba(40,90,160,0.08) 100%);
+  border: 1px solid rgba(80,150,220,0.25); border-radius: 12px;
+  padding: 16px 20px; margin-bottom: 18px;
+}
+.rebuild-banner.visible { display: flex; }
+.rebuild-spinner { width: 22px; height: 22px; border: 2.5px solid rgba(80,150,220,0.2); border-top-color: rgba(100,170,240,0.8); border-radius: 50%; animation: rebuildSpin 1s linear infinite; flex-shrink: 0; margin-top: 1px; }
+.rebuild-text { font-size: 13px; color: var(--text-secondary); line-height: 1.55; }
+.rebuild-text strong { color: var(--text-primary); font-weight: 600; }
+.rebuild-progress { width: 100%; height: 4px; background: rgba(80,150,220,0.12); border-radius: 2px; margin-top: 10px; overflow: hidden; }
+.rebuild-progress-fill { height: 100%; background: linear-gradient(90deg, rgba(80,150,220,0.6), rgba(100,170,240,0.8)); border-radius: 2px; transition: width 1.5s ease; }
 .main-content { flex: 1; overflow-y: auto; padding: 24px; }
 .main-content::-webkit-scrollbar { width: 5px; }
 .main-content::-webkit-scrollbar-track { background: transparent; }
@@ -418,6 +431,14 @@ body {
       <div class="action-row">
         <button class="action-btn btn-send" onclick="navigateTo('send')">↑ Send GAEL</button>
         <button class="action-btn btn-receive" onclick="navigateTo('receive')">↓ Receive GAEL</button>
+      </div>
+      <div class="rebuild-banner" id="rebuildBanner">
+        <div class="rebuild-spinner"></div>
+        <div class="rebuild-text">
+          <strong>Rebuilding block index after upgrade</strong><br>
+          This is a one-time repair and will take a few minutes. Your wallet, keys, and balance are safe and will fully reappear once complete.
+          <div class="rebuild-progress"><div class="rebuild-progress-fill" id="rebuildProgress" style="width:0%"></div></div>
+        </div>
       </div>
       <div class="stats-row">
         <div class="stat-card">
@@ -866,6 +887,10 @@ function buildTxItem(tx) {
   return '<div class="tx-item" style="cursor:pointer" data-txid="'+safeTxid+'"><div class="tx-icon-wrap '+escapeHtml(tc)+'">'+icon+'</div><div class="tx-details"><div class="tx-type">'+safeTl+'</div><div class="tx-address">'+safeSa+'</div></div><div class="tx-right"><div class="tx-amount '+(tx.amount<0?'negative':'positive')+'">'+safeAmt+' GAEL</div><div class="tx-date">'+safeDate+'</div><span class="tx-conf">'+safeConf+' conf.</span></div></div>';
 }
 let _startupAttempts = 0;
+let _rebuildDetected = false;
+let _rebuildDismissed = false;
+let _initialHeadersChecked = false;
+let _isPostUpgradeContext = false;
 function getStartupPhase(errorMsg) {
   var m = String(errorMsg).toLowerCase();
   if (m.includes('loading wallet')) return 'Loading wallet...';
@@ -889,6 +914,15 @@ async function updateDashboard() {
       return;
     }
     _startupAttempts = 0;
+    if (!_initialHeadersChecked) {
+      _initialHeadersChecked = true;
+      try {
+        var wi = await window.gaelium.getWalletInfo();
+        if (wi && typeof wi.keypoololdest === 'number') {
+          _isPostUpgradeContext = (Math.floor(Date.now() / 1000) - wi.keypoololdest) > 60;
+        }
+      } catch(e) {}
+    }
     document.getElementById('balanceAmount').innerHTML=formatAmount(d.balance)+'<span class="balance-currency"> GAEL</span>';
     let pp=[];
     if (d.unconfirmed>0) pp.push('Pending: '+formatAmount(d.unconfirmed)+' GAEL');
@@ -911,6 +945,22 @@ async function updateDashboard() {
       document.getElementById('bottomBlock').textContent = d.blocks;
       document.getElementById('balanceAddress').textContent = 'Connected to the Gaelium Core Network (GAEL)';
     }
+    // Rebuild post-upgrade detection: blocks starting from 0 but headers already at tip
+    var rebuildBanner = document.getElementById('rebuildBanner');
+    if (!_rebuildDismissed && _isPostUpgradeContext) {
+      if (d.headers > 1000 && d.blocks < (d.headers - 5)) {
+        if (_rebuildDetected || d.blocks < 100) {
+          _rebuildDetected = true;
+          rebuildBanner.classList.add('visible');
+          var rbPct = Math.min(99, ((d.blocks / d.headers) * 100)).toFixed(1);
+          document.getElementById('rebuildProgress').style.width = rbPct + '%';
+        }
+      } else if (_rebuildDetected) {
+        _rebuildDismissed = true;
+        rebuildBanner.classList.remove('visible');
+      }
+    }
+
     document.getElementById('statHash').textContent=formatHash(d.networkhashps);
     document.getElementById('statPeers').textContent=d.connections;
     document.getElementById('statDiff').textContent='Diff: '+parseFloat(d.difficulty).toFixed(4);
