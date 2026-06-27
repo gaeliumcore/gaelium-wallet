@@ -1,7 +1,7 @@
 {
   "name": "gaelium-wallet",
   "version": "1.0.1",
-  "description": "Gaelium Wallet - The Decentralized Alternative to Digital Euro",
+  "description": "Gaelium Wallet - Desktop wallet for Gaelium (GAEL) cryptocurrency",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

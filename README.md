@@ -4,7 +4,7 @@
 ![Version](https://img.shields.io/badge/version-1.0.1-orange.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)
 
-> Gaelium (GAEL) desktop wallet — Windows, Linux, macOS.
+> Gaelium (GAEL) desktop wallet - Windows, Linux, macOS.
 
 ## Overview
 
@@ -49,7 +49,7 @@ npx electron-builder --mac
 ## Requirements
 
 - Node.js 18+
-- Gaelium daemon (gaeliumd) — included in releases
+- Gaelium daemon (gaeliumd) - included in releases
 
 ## Links
 
@@ -61,4 +61,4 @@ npx electron-builder --mac
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT License - see [LICENSE](LICENSE) for details.
