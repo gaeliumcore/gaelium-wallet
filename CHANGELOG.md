@@ -17,6 +17,7 @@
 - [I1bis] Installer Windows: remove gaelium-wallet-updater folder from %LOCALAPPDATA% during uninstall
 - [I2] Installer Windows: transparent upgrade from v1.0.0 (delete legacy UninstallString registry values in HKLM+HKCU to bypass old uninstaller; isUpdated guard + /SD IDNO safety net for future upgrades)
 - [UX] Rebuild banner displayed during one-time chainstate repair after upgrade from v1.0.0 (progress bar, auto-dismiss, keypoololdest-based detection)
+- [Build] Scoped extraResources per platform in package.json to avoid embedding foreign-platform daemon binaries in each bundle (reduces Windows installer by ~10 MB; Linux and Mac builds benefit natively)
 
 ## v1.0.0 (2026-06-15)
 

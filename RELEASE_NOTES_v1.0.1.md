@@ -1,4 +1,4 @@
-# Gaelium Wallet v1.0.1 — Release Notes
+# Gaelium Wallet v1.0.1 - Release Notes
 
 **Release date:** [DATE TO BE FILLED ON PUSH DAY]
 **Platforms:** Windows, Linux, macOS
@@ -8,33 +8,33 @@
 
 v1.0.1 is a stability and security release focused on fixing user-reported issues from the v1.0.0 mainnet launch (June 15, 2026). This release addresses 7 functional/UX fixes (plus 1 reported issue investigated and confirmed as a non-bug), 3 security hardenings, and 2 critical installer bugs. The release also introduces a clean upgrade path from v1.0.0 with transparent installation and clear user feedback during the one-time post-upgrade chainstate rebuild.
 
-The daemon code (Gaelium Core) remains at v1.0.0 — no consensus or protocol changes in this release. All fixes are in the wallet desktop application layer (Electron renderer + main process + NSIS installer script).
+The daemon code (Gaelium Core) remains at v1.0.0 - no consensus or protocol changes in this release. All fixes are in the wallet desktop application layer (Electron renderer + main process + NSIS installer script).
 
 ## What's New
 
 ### User Experience
 
-- **W1** — Status bar no longer overlaps the wallet content when the window is resized to small dimensions.
-- **W2** — Address History items can now be copied to clipboard with a single click. Previously, the click handlers were wired before DOM updates which broke the interaction.
-- **W3** — Importing a private key now consistently triggers a wallet rescan from the key's creation date, ensuring all related historical transactions are correctly retrieved. The previous optional rescan checkbox was removed to prevent corrupted balance states.
-- **W4** — Transactions page now uses server-side pagination (20 items per page) via RPC `listtransactions` skip parameter, dramatically improving load time for wallets with many transactions.
-- **W5** — Clearer startup phases and visible sync progress indicator. The sync state is now detected via the headers vs blocks delta, with a visible progress bar showing percentage of blocks downloaded.
-- **W6** — Security and Keys pages now use full available width with a multi-column layout on screens above 960 pixels wide, replacing the previous narrow single-column display.
-- **W7** — Investigated a reported daemon connectivity issue ("wrong IPs"). No fix was required: full audit of the daemon source code and all distributed binaries confirmed they are clean (no residual Ravencoin DNS seeds, no Ravencoin fixed seeds in the binary arrays). The reported behavior matched standard Bitcoin Core semantics where `addnode=` adds a peer in addition to the DNS-discovered peers rather than replacing them. Operators wanting an isolated node should use `connect=` or set `dnsseed=0` and `dns=0` in `gaelium.conf`.
-- **W8** — Wallet now waits for the daemon to fully exit before quitting. Previously, the daemon was terminated prematurely after a fixed 2-second timeout, leaving the chainstate database in an inconsistent state which caused a full chain rescan on next startup. This fix prevents that issue going forward (see Upgrade Notes for one-time impact on v1.0.0 upgrades).
+- **W1** - Status bar no longer overlaps the wallet content when the window is resized to small dimensions.
+- **W2** - Address History items can now be copied to clipboard with a single click. Previously, the click handlers were wired before DOM updates which broke the interaction.
+- **W3** - Importing a private key now consistently triggers a wallet rescan from the key's creation date, ensuring all related historical transactions are correctly retrieved. The previous optional rescan checkbox was removed to prevent corrupted balance states.
+- **W4** - Transactions page now uses server-side pagination (20 items per page) via RPC `listtransactions` skip parameter, dramatically improving load time for wallets with many transactions.
+- **W5** - Clearer startup phases and visible sync progress indicator. The sync state is now detected via the headers vs blocks delta, with a visible progress bar showing percentage of blocks downloaded.
+- **W6** - Security and Keys pages now use full available width with a multi-column layout on screens above 960 pixels wide, replacing the previous narrow single-column display.
+- **W7** - Investigated a reported daemon connectivity issue ("wrong IPs"). No fix was required: full audit of the daemon source code and all distributed binaries confirmed they are clean (no residual Ravencoin DNS seeds, no Ravencoin fixed seeds in the binary arrays). The reported behavior matched standard Bitcoin Core semantics where `addnode=` adds a peer in addition to the DNS-discovered peers rather than replacing them. Operators wanting an isolated node should use `connect=` or set `dnsseed=0` and `dns=0` in `gaelium.conf`.
+- **W8** - Wallet now waits for the daemon to fully exit before quitting. Previously, the daemon was terminated prematurely after a fixed 2-second timeout, leaving the chainstate database in an inconsistent state which caused a full chain rescan on next startup. This fix prevents that issue going forward (see Upgrade Notes for one-time impact on v1.0.0 upgrades).
 
 ### Security Hardening
 
-- **C1** — Replaced `execSync` with `execFileSync` to prevent shell injection via maliciously crafted system usernames during Linux desktop entry creation.
-- **M1** — Enabled `sandbox: true` in Electron BrowserWindow webPreferences for defense-in-depth against renderer-level exploits.
-- **M4** — Captured the application executable path at startup before the runtime environment can be tampered with, preventing relaunch hijacking after wallet encryption or restore operations.
-- **Cleanup** — Backup files (`*.bak_*`) are now excluded from the distributed packages via `.gitignore` and electron-builder configuration.
+- **C1** - Replaced `execSync` with `execFileSync` to prevent shell injection via maliciously crafted system usernames during Linux desktop entry creation.
+- **M1** - Enabled `sandbox: true` in Electron BrowserWindow webPreferences for defense-in-depth against renderer-level exploits.
+- **M4** - Captured the application executable path at startup before the runtime environment can be tampered with, preventing relaunch hijacking after wallet encryption or restore operations.
+- **Cleanup** - Backup files (`*.bak_*`) are now excluded from the distributed packages via `.gitignore` and electron-builder configuration.
 
 ### Windows Installer (NSIS)
 
-- **I1bis** — The `gaelium-wallet-updater` folder in `%LOCALAPPDATA%` is now properly removed during uninstall. This folder is created by the Electron auto-updater mechanism and previously remained on disk after uninstall, polluting the user's system.
-- **I2** — Transparent upgrade from v1.0.0 to v1.0.1. The installer now deletes `UninstallString` registry values in both HKLM and HKCU before electron-builder reads them, which bypasses the v1.0.0 uninstaller entirely. This eliminates the legacy blockchain data deletion prompt that would otherwise appear during upgrade and could cause data loss if dismissed incorrectly.
-- **Future-proofing** — The `${ifNot} ${isUpdated}` guard and `/SD IDNO` safety net on the blockchain prompt ensure that future v1.0.1 → v1.0.2+ upgrades will be completely silent and safe by default.
+- **I1bis** - The `gaelium-wallet-updater` folder in `%LOCALAPPDATA%` is now properly removed during uninstall. This folder is created by the Electron auto-updater mechanism and previously remained on disk after uninstall, polluting the user's system.
+- **I2** - Transparent upgrade from v1.0.0 to v1.0.1. The installer now deletes `UninstallString` registry values in both HKLM and HKCU before electron-builder reads them, which bypasses the v1.0.0 uninstaller entirely. This eliminates the legacy blockchain data deletion prompt that would otherwise appear during upgrade and could cause data loss if dismissed incorrectly.
+- **Future-proofing** - The `${ifNot} ${isUpdated}` guard and `/SD IDNO` safety net on the blockchain prompt ensure that future v1.0.1 → v1.0.2+ upgrades will be completely silent and safe by default.
 
 ### Rebuild Banner (UX)
 
@@ -42,7 +42,7 @@ A new informational banner is displayed in the Overview page during the one-time
 
 ## Upgrade Notes
 
-### Upgrading from v1.0.0 — One-time chainstate rebuild
+### Upgrading from v1.0.0 - One-time chainstate rebuild
 
 When you launch v1.0.1 for the first time after upgrading from v1.0.0, your wallet will perform a one-time chainstate rebuild. During this rebuild, the block height starts at 0 and progressively increases as the wallet reprocesses the chain.
 
@@ -56,7 +56,7 @@ When you launch v1.0.1 for the first time after upgrading from v1.0.0, your wall
 
 The wallet displays a clear banner during the rebuild so you know exactly what is happening. The banner disappears automatically once the rebuild completes.
 
-### Fresh install — No special action needed
+### Fresh install - No special action needed
 
 If you do not have v1.0.0 installed, install v1.0.1 as a fresh install. No banner will appear during the initial sync (which uses the normal sync progress indicator instead).
 
@@ -66,11 +66,11 @@ The standalone daemon binaries (`gaeliumd`, `gaelium-cli`) for miners and pool o
 
 ## Files
 
-[TO BE FILLED ON PUSH DAY — populate with all platform binaries: Windows portable, Windows installer, Linux portable, Linux deb, Linux rpm, Linux AppImage, macOS dmg, macOS zip, and their SHA256 hashes]
+[TO BE FILLED ON PUSH DAY - populate with all platform binaries: Windows portable, Windows installer, Linux portable, Linux deb, Linux rpm, Linux AppImage, macOS dmg, macOS zip, and their SHA256 hashes]
 
-**Windows binaries (provisionally):**
-- `Gaelium Wallet 1.0.1.exe` (portable, x64) — SHA256: `e53c8ac81c66330a8a82fe76bb4a425669f037b91ac68668b58986dd5d44b5e2`
-- `Gaelium Wallet Setup 1.0.1.exe` (installer, x64) — SHA256: `5de0a7e6d8894a1b3da83062d70fdf50f0f9cb5716522ecf5e1f61b3fc75d081`
+**Windows binaries:**
+- `Gaelium Wallet 1.0.1.exe` (portable, x64, 76 MB) - SHA256: `cf7a963b935eacdab7a6b5c2d53d1876606e1a5db20d5416a28acd861847b9e5`
+- `Gaelium Wallet Setup 1.0.1.exe` (installer, x64, 76 MB) - SHA256: `88f570c46d534cc764b9a4303710779e720ab2bc62aeb40caefa105798287af6`
 
 Note: Windows binaries are not code-signed in v1.0.1. Windows SmartScreen will display a warning during installation. Click "More info" then "Run anyway" to proceed. Code signing (DigiCert EV certificate) is planned for a future release.
 
