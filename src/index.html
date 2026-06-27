@@ -807,7 +807,7 @@ function navigateTo(page) {
   if (page === 'security') updateLockStatus();
 }
 if (window.gaelium.onNavigateTo) { window.gaelium.onNavigateTo((page) => {
-  // After relaunch, daemon may not be ready yet — retry navigation
+  // After relaunch, daemon may not be ready yet - retry navigation
   async function waitAndNavigate(p, retries) {
     navigateTo(p);
     if (p === 'security') {
@@ -873,8 +873,8 @@ function filterChangeTx(txs) {
 function buildTxItem(tx) {
   let icon='↓', tc='receive', tl='Received', ac='positive';
   if (tx.category==='send') { icon='↑'; tc='send'; tl='Sent'; ac='negative'; }
-  else if (tx.category==='generate') { icon='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="12" y1="6" x2="12" y2="18"/></svg>'; tc='generate'; tl='Mined — Block #'+escapeHtml(tx.blockheight||''); }
-  else if (tx.category==='immature') { icon='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'; tc='immature'; tl='Immature — Block #'+escapeHtml(tx.blockheight||''); }
+  else if (tx.category==='generate') { icon='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="12" y1="6" x2="12" y2="18"/></svg>'; tc='generate'; tl='Mined - Block #'+escapeHtml(tx.blockheight||''); }
+  else if (tx.category==='immature') { icon='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'; tc='immature'; tl='Immature - Block #'+escapeHtml(tx.blockheight||''); }
   let addr = tx.address||'Unknown';
   let sa = addr.length>34 ? addr.substring(0,16)+'...'+addr.substring(addr.length-8) : addr;
   let amt = tx.amount<0 ? formatAmount(tx.amount) : '+'+formatAmount(tx.amount);
@@ -983,7 +983,7 @@ async function loadReceiveAddress() {
       const last = addrs[addrs.length - 1];
       document.getElementById('receiveAddress').textContent = last.address;
     } else {
-      // No addresses at all — create the first one
+      // No addresses at all - create the first one
       const a = await window.gaelium.getNewAddress('default');
       if (!a.error) document.getElementById('receiveAddress').textContent = a;
     }
@@ -1026,7 +1026,7 @@ async function loadAddressHistory() {
     addrs.forEach(a => {
       const label = a.label || a.account || '';
       const safeLabel = escapeHtml(label);
-      const labelDisplay = label ? '<span style="color:var(--green-light);font-weight:600;">'+safeLabel+'</span> — ' : '';
+      const labelDisplay = label ? '<span style="color:var(--green-light);font-weight:600;">'+safeLabel+'</span> - ' : '';
       const addr = a.address;
       const safeAddr = escapeHtml(addr);
       const sa = addr.length>34 ? addr.substring(0,16)+'...'+addr.substring(addr.length-8) : addr;
