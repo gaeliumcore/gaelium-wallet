@@ -69,8 +69,8 @@ The standalone daemon binaries (`gaeliumd`, `gaelium-cli`) for miners and pool o
 [TO BE FILLED ON PUSH DAY - populate with all platform binaries: Windows portable, Windows installer, Linux portable, Linux deb, Linux rpm, Linux AppImage, macOS dmg, macOS zip, and their SHA256 hashes]
 
 **Windows binaries:**
-- `Gaelium Wallet 1.0.1.exe` (portable, x64, 76 MB) - SHA256: `cf7a963b935eacdab7a6b5c2d53d1876606e1a5db20d5416a28acd861847b9e5`
-- `Gaelium Wallet Setup 1.0.1.exe` (installer, x64, 76 MB) - SHA256: `88f570c46d534cc764b9a4303710779e720ab2bc62aeb40caefa105798287af6`
+- `Gaelium Wallet 1.0.1.exe` (portable, x64, 76 MB) - SHA256: `65e42e5b415caeac39f9b827cada2b00c0080c94b341d99d296ca4b7a5d54852`
+- `Gaelium Wallet Setup 1.0.1.exe` (installer, x64, 76 MB) - SHA256: `f0e8cd8ccc3ee065b0116a96f1e9e3c834e64eca2678421e9b5890799d84d348`
 
 Note: Windows binaries are not code-signed in v1.0.1. Windows SmartScreen will display a warning during installation. Click "More info" then "Run anyway" to proceed. Code signing (DigiCert EV certificate) is planned for a future release.
 
