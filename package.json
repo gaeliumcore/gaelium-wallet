@@ -25,7 +25,10 @@
         "portable",
         "nsis"
       ],
-      "icon": "src/assets/icon.ico"
+      "icon": "src/assets/icon.ico",
+      "extraResources": [
+        { "from": "daemon/gaeliumd.exe", "to": "daemon/gaeliumd.exe" }
+      ]
     },
     "files": [
       "main.js",
@@ -33,19 +36,21 @@
       "src/**/*",
       "!**/*.bak*"
     ],
-    "extraResources": [
-      {
-        "from": "daemon/",
-        "to": "daemon/",
-        "filter": [
-          "**/*"
-        ]
-      }
-    ],
     "linux": {
       "target": ["AppImage", "deb", "rpm"],
       "icon": "src/assets/icon.png",
-      "category": "Finance"
+      "category": "Finance",
+      "extraResources": [
+        { "from": "daemon/gaeliumd", "to": "daemon/gaeliumd" }
+      ]
+    },
+    "mac": {
+      "target": ["dmg", "zip"],
+      "icon": "src/assets/icon.icns",
+      "category": "public.app-category.finance",
+      "extraResources": [
+        { "from": "daemon/gaeliumd", "to": "daemon/gaeliumd" }
+      ]
     },
     "nsis": {
       "oneClick": false,
