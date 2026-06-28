@@ -1,6 +1,6 @@
 # Gaelium Wallet v1.0.1 - Release Notes
 
-**Release date:** [DATE TO BE FILLED ON PUSH DAY]
+**Release date:** 2026-06-28
 **Platforms:** Windows, Linux, macOS
 **Compatibility:** Backward compatible with v1.0.0 wallet data (no migration needed, see Upgrade Notes below)
 
@@ -66,13 +66,22 @@ The standalone daemon binaries (`gaeliumd`, `gaelium-cli`) for miners and pool o
 
 ## Files
 
-[TO BE FILLED ON PUSH DAY - populate with all platform binaries: Windows portable, Windows installer, Linux portable, Linux deb, Linux rpm, Linux AppImage, macOS dmg, macOS zip, and their SHA256 hashes]
-
 **Windows binaries:**
 - `Gaelium Wallet 1.0.1.exe` (portable, x64, 76 MB) - SHA256: `d33afb49d824767266fc4ae4b49ca2b1e797049fb4c419396091d4c5d736e3b0`
 - `Gaelium Wallet Setup 1.0.1.exe` (installer, x64, 76 MB) - SHA256: `3a3a3dadda05d46cddcd8c9fddcdc367fc6dfae013d3121895b411d2697c52f0`
 
 Note: Windows binaries are not code-signed in v1.0.1. Windows SmartScreen will display a warning during installation. Click "More info" then "Run anyway" to proceed. Code signing (DigiCert EV certificate) is planned for a future release.
+
+**Linux binaries:**
+- `gaelium-wallet_1.0.1_amd64.deb` (Debian/Ubuntu installer, x64, 77 MB) - SHA256: `ada76016cdf18d36b3f834b8726422f48d985a7234716e2ce9671cef7d1f3f57`
+- `gaelium-wallet-1.0.1.x86_64.rpm` (Fedora/RHEL installer, x64, 77 MB) - SHA256: `7945294b050abe007b9490fbbc36a64ae72b78be8705467d522051503f312153`
+- `Gaelium Wallet-1.0.1.AppImage` (portable, x64, 110 MB) - SHA256: `1a8e10887972bdc2fd849b2ba7d39068a12c288dbd9d88ebf89ded75ad084fab`
+
+**macOS binaries:**
+- `Gaelium Wallet-1.0.1.dmg` (disk image installer, Intel x86_64, 107 MB) - SHA256: `c56b6f9893f4dc2ff2616401641b284c85ef5e6e239b63db4ed4659b1c153b08`
+- `Gaelium Wallet-1.0.1-mac.zip` (portable, Intel x86_64, 102 MB) - SHA256: `bf1347e685e3c6dc2f84437eb4b3940796af68883c0817fa39de6a7c6e675b6d`
+
+Note: macOS binaries are not signed with an Apple Developer certificate in v1.0.1. macOS Gatekeeper will display an "unidentified developer" warning. Right-click the app and select "Open" to bypass. Apple Developer signing (via an external service enrollment) is planned for v1.0.2.
 
 ## Verification
 
@@ -98,7 +107,7 @@ The audited surface includes: Electron main process, preload script, renderer (H
 
 ## Known Limitations
 
-- **Code signing:** Windows binaries are not yet code-signed. SmartScreen warning will appear on first install. Planned for a future release with DigiCert EV certificate.
+- **Code signing:** Windows binaries are not yet code-signed (SmartScreen warning on first install, DigiCert EV planned for a future release). macOS binaries are not yet signed with Apple Developer certificate (Gatekeeper warning, signing planned for v1.0.2 after an external service enrollment).
 - **Hardware wallet support:** Not implemented. Planned for v1.1 or later.
 - **Auto-update mechanism:** Not active. Updates require manual download and reinstall via the installer or portable replacement.
 
