@@ -1,6 +1,6 @@
 {
   "name": "gaelium-wallet",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Gaelium Wallet - Desktop wallet for Gaelium (GAEL) cryptocurrency",
   "main": "main.js",
   "scripts": {
