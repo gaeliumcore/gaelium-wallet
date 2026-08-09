@@ -583,15 +583,15 @@ function renderTxPagination(page, hasNext) {
   var el = document.getElementById('txPagination');
   if (page === 0 && !hasNext) { el.style.display = 'none'; return; }
   var h = '';
-  h += '<button class="page-btn" onclick="loadAllTransactions(0)"' + (page === 0 ? ' disabled' : '') + '>&laquo;</button>';
-  h += '<button class="page-btn" onclick="loadAllTransactions(' + (page - 1) + ')"' + (page === 0 ? ' disabled' : '') + '>&lsaquo; Prev</button>';
+  h += '<button class="page-btn" data-page="0"' + (page === 0 ? ' disabled' : '') + '>&laquo;</button>';
+  h += '<button class="page-btn" data-page="' + (page - 1) + '"' + (page === 0 ? ' disabled' : '') + '>&lsaquo; Prev</button>';
   var start = Math.max(0, page - 2);
   var end = page + 2;
   for (var i = start; i <= end; i++) {
     if (i > page && !hasNext) break;
-    h += '<button class="page-btn' + (i === page ? ' active' : '') + '" onclick="loadAllTransactions(' + i + ')">' + (i + 1) + '</button>';
+    h += '<button class="page-btn' + (i === page ? ' active' : '') + '" data-page="' + i + '">' + (i + 1) + '</button>';
   }
-  h += '<button class="page-btn" onclick="loadAllTransactions(' + (page + 1) + ')"' + (!hasNext ? ' disabled' : '') + '>Next &rsaquo;</button>';
+  h += '<button class="page-btn" data-page="' + (page + 1) + '"' + (!hasNext ? ' disabled' : '') + '>Next &rsaquo;</button>';
   h += '<span class="page-info">Page ' + (page + 1) + '</span>';
   el.innerHTML = h;
   el.style.display = 'flex';
@@ -603,3 +603,60 @@ document.addEventListener('click', function(e) {
 });
 updateDashboard();
 setInterval(updateDashboard, 10000);
+
+// Event wiring, moved out of inline onclick attributes. Runs on DOMContentLoaded
+// because the modals are declared after the script tag and do not exist yet when
+// the body of this file executes.
+document.addEventListener('DOMContentLoaded', function() {
+  function on(id, fn) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('click', fn);
+  }
+
+  // Window controls
+  on('btnWindowMinimize', function() { window.gaelium.minimize(); });
+  on('btnWindowMaximize', function() { window.gaelium.maximize(); });
+  on('btnWindowClose', function() { window.gaelium.close(); });
+
+  // Dashboard shortcuts
+  on('btnNavSend', function() { navigateTo('send'); });
+  on('btnNavReceive', function() { navigateTo('receive'); });
+
+  // Send
+  on('btnFillMaxAmount', function() { fillMaxAmount(); });
+  on('sendBtn', function() { sendTransaction(); });
+
+  // Receive
+  on('btnCopyAddress', function() { copyAddress(); });
+  on('btnGenerateNewAddress', function() { generateNewAddress(); });
+
+  // Security
+  on('btnImportPrivateKey', function() { importPrivateKey(); });
+  on('btnExportPrivateKey', function() { exportPrivateKey(); });
+  on('btnEncryptWallet', function() { encryptWallet(); });
+  on('btnChangePassphrase', function() { changePassphrase(); });
+  on('btnUnlockWallet', function() { unlockWallet(); });
+  on('btnLockWallet', function() { lockWallet(); });
+  on('btnBackupWallet', function() { backupWallet(); });
+  on('btnRestoreWallet', function() { restoreWallet(); });
+
+  // Transaction detail modal. The guard keeps a click inside the modal from
+  // closing it: only a click on the overlay itself counts.
+  on('txModal', function(e) { if (e.target === e.currentTarget) closeTxModal(); });
+  on('btnTxModalClose', function() { closeTxModal(); });
+
+  // Send confirmation modal
+  on('btnConfirmModalClose', function() { cancelSend(); });
+  on('btnCancelSend', function() { cancelSend(); });
+  on('btnConfirmSend', function() { confirmSend(); });
+
+  // Pagination is rebuilt by innerHTML on every render, so the listener sits on
+  // the container instead of on the buttons.
+  var pagination = document.getElementById('txPagination');
+  if (pagination) {
+    pagination.addEventListener('click', function(e) {
+      var btn = e.target.closest('.page-btn');
+      if (btn) loadAllTransactions(Number(btn.dataset.page));
+    });
+  }
+});

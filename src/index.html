@@ -355,9 +355,9 @@ body {
 <div class="title-bar">
   <div class="title-bar-text">Gaelium Wallet v1.0.2</div>
   <div class="window-controls">
-    <button class="win-btn win-min" onclick="window.gaelium.minimize()">─</button>
-    <button class="win-btn win-max" onclick="window.gaelium.maximize()">□</button>
-    <button class="win-btn win-close" onclick="window.gaelium.close()">✕</button>
+    <button id="btnWindowMinimize" class="win-btn win-min">─</button>
+    <button id="btnWindowMaximize" class="win-btn win-max">□</button>
+    <button id="btnWindowClose" class="win-btn win-close">✕</button>
   </div>
 </div>
 <div class="app-layout">
@@ -437,8 +437,8 @@ body {
         </div>
       </div>
       <div class="action-row">
-        <button class="action-btn btn-send" onclick="navigateTo('send')">↑ Send GAEL</button>
-        <button class="action-btn btn-receive" onclick="navigateTo('receive')">↓ Receive GAEL</button>
+        <button id="btnNavSend" class="action-btn btn-send">↑ Send GAEL</button>
+        <button id="btnNavReceive" class="action-btn btn-receive">↓ Receive GAEL</button>
       </div>
       <div class="rebuild-banner" id="rebuildBanner">
         <div class="rebuild-spinner"></div>
@@ -478,11 +478,11 @@ body {
         <label class="form-label">Amount (GAEL)</label>
         <div style="display:flex;gap:8px;align-items:center;">
           <input type="number" class="form-input" id="sendAmount" placeholder="0.00" step="0.01" min="0" style="flex:1;">
-          <button onclick="fillMaxAmount()" style="padding:12px 16px;background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;color:var(--green-light);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">Max</button>
+          <button id="btnFillMaxAmount" style="padding:12px 16px;background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;color:var(--green-light);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">Max</button>
         </div>
         <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Estimated network fee: ~0.003 GAEL</div>
       </div>
-      <button class="send-btn" id="sendBtn" onclick="sendTransaction()">Send Transaction</button>
+      <button class="send-btn" id="sendBtn">Send Transaction</button>
       <div class="status-msg" id="sendStatus"></div>
     </div>
     <div class="page" id="page-receive">
@@ -490,13 +490,13 @@ body {
       <div class="receive-address-box">
         <div class="form-label">Your Gaelium Address</div>
         <div class="receive-address" id="receiveAddress">Loading...</div>
-        <button class="copy-btn" onclick="copyAddress()">Copy Address</button>
+        <button id="btnCopyAddress" class="copy-btn">Copy Address</button>
       </div>
       <div style="margin-top:16px;">
         <label style="display:block;font-size:13px;color:var(--text-secondary);margin-bottom:6px;">Label (optional)</label>
         <input type="text" id="newAddrLabel" placeholder="e.g. Mining, Donation, Payment..." class="gael-input-focus" style="width:100%;padding:12px 16px;background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box;">
       </div>
-      <button class="new-address-btn" onclick="generateNewAddress()">+ Generate New Address</button>
+      <button id="btnGenerateNewAddress" class="new-address-btn">+ Generate New Address</button>
       <div class="status-msg" id="receiveStatus"></div>
       <div style="margin-top:24px;">
         <div style="font-size:16px;font-weight:600;margin-bottom:12px;">Address History</div>
@@ -516,7 +516,7 @@ body {
           <label style="display:block;font-size:13px;color:var(--text-secondary);margin-bottom:6px;">Label (optional)</label>
           <input type="text" id="importKeyLabel" placeholder="e.g. Premine, Mining rewards..." class="gael-input-focus" style="width:100%;padding:12px 16px;background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;">
         </div>
-        <button onclick="importPrivateKey()" class="gael-btn-lift-green" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--green-primary),var(--green-light));color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;">⚿ Import Private Key</button>
+        <button id="btnImportPrivateKey" class="gael-btn-lift-green" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--green-primary),var(--green-light));color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;">⚿ Import Private Key</button>
         <div id="importStatus" style="margin-top:14px;padding:12px;border-radius:8px;font-size:13px;display:none;"></div>
         <div style="margin-top:16px;padding:14px;background:rgba(240,180,41,0.08);border:1px solid rgba(240,180,41,0.2);border-radius:10px;">
           <div style="font-size:12px;color:var(--yellow);font-weight:600;margin-bottom:4px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Warning</div>
@@ -530,7 +530,7 @@ body {
           <label style="display:block;font-size:13px;color:var(--text-secondary);margin-bottom:6px;">Gaelium Address</label>
           <input type="text" id="exportAddress" placeholder="Enter your Gaelium address (G...)..." class="gael-input-focus" style="width:100%;padding:12px 16px;background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;color:var(--text-primary);font-family:JetBrains Mono,monospace;font-size:13px;outline:none;">
         </div>
-        <button onclick="exportPrivateKey()" class="gael-btn-lift-green" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--green),var(--green-light));color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Export Private Key</button>
+        <button id="btnExportPrivateKey" class="gael-btn-lift-green" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--green),var(--green-light));color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Export Private Key</button>
         <div id="exportResult" style="margin-top:14px;padding:12px;border-radius:8px;font-size:13px;display:none;"></div>
         <div style="margin-top:16px;padding:14px;background:rgba(231,76,94,0.08);border:1px solid rgba(231,76,94,0.2);border-radius:10px;">
           <div style="font-size:12px;color:var(--red);font-weight:600;margin-bottom:4px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Security Warning</div>
@@ -553,7 +553,7 @@ body {
           <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:6px;">Confirm Passphrase</label>
           <input type="password" id="encryptPass2" placeholder="Confirm passphrase..." class="gael-input-focus" style="width:100%;padding:12px 16px;background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;">
         </div>
-        <button onclick="encryptWallet()" class="gael-btn-lift-green" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--green),var(--green-light));color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> Encrypt Wallet</button>
+        <button id="btnEncryptWallet" class="gael-btn-lift-green" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--green),var(--green-light));color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> Encrypt Wallet</button>
         <div id="encryptStatus" style="margin-top:14px;padding:12px;border-radius:8px;font-size:13px;display:none;"></div>
       </div>
       <div id="secEncryptedGrid" class="cards-grid" style="display:none;margin-bottom:20px;">
@@ -573,7 +573,7 @@ body {
           <label style="font-size:13px;color:var(--text-secondary);display:block;margin-bottom:6px;">Confirm New Passphrase</label>
           <input type="password" id="chgNewPass2" placeholder="Confirm new passphrase..." class="gael-input-focus" style="width:100%;padding:12px 16px;background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;">
         </div>
-        <button onclick="changePassphrase()" class="gael-btn-lift-green" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--green),var(--green-light));color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;">⚿ Change Passphrase</button>
+        <button id="btnChangePassphrase" class="gael-btn-lift-green" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--green),var(--green-light));color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;">⚿ Change Passphrase</button>
         <div id="changePassStatus" style="margin-top:14px;padding:12px;border-radius:8px;font-size:13px;display:none;"></div>
       </div>
       <!-- UNLOCK / LOCK SECTION (shown only when wallet IS encrypted) -->
@@ -589,8 +589,8 @@ body {
           <input type="number" id="unlockTimeout" value="300" min="10" max="3600" class="gael-input-focus" style="width:200px;padding:12px 16px;background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;">
         </div>
         <div style="display:flex;gap:10px;">
-          <button onclick="unlockWallet()" class="gael-btn-lift" style="flex:1;padding:14px;background:linear-gradient(135deg,var(--green),var(--green-light));color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 019.9-1"/></svg> Unlock</button>
-          <button onclick="lockWallet()" class="gael-btn-lift" style="flex:1;padding:14px;background:linear-gradient(135deg,#dc2626,#ef4444);color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> Lock</button>
+          <button id="btnUnlockWallet" class="gael-btn-lift" style="flex:1;padding:14px;background:linear-gradient(135deg,var(--green),var(--green-light));color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 019.9-1"/></svg> Unlock</button>
+          <button id="btnLockWallet" class="gael-btn-lift" style="flex:1;padding:14px;background:linear-gradient(135deg,#dc2626,#ef4444);color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> Lock</button>
         </div>
         <div id="unlockStatus" style="margin-top:14px;padding:12px;border-radius:8px;font-size:13px;display:none;"></div>
       </div>
@@ -605,7 +605,7 @@ body {
       <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;">
         <h3 style="font-size:16px;margin-bottom:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Backup Wallet</h3>
         <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">Save a copy of your wallet file to a safe location. This backup contains all your private keys and addresses.</p>
-        <button onclick="backupWallet()" class="gael-btn-lift-green" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--green),var(--green-light));color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Backup Wallet</button>
+        <button id="btnBackupWallet" class="gael-btn-lift-green" style="width:100%;padding:14px;background:linear-gradient(135deg,var(--green),var(--green-light));color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Backup Wallet</button>
         <div id="backupStatus" style="margin-top:14px;padding:12px;border-radius:8px;font-size:13px;display:none;"></div>
       </div>
       <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;">
@@ -615,7 +615,7 @@ body {
           <div style="font-size:12px;color:var(--red);font-weight:600;margin-bottom:4px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Warning</div>
           <div style="font-size:12px;color:var(--text-secondary);line-height:1.5;">Your current wallet will be automatically backed up before restoration. However, all transactions made since the backup was created will not appear in the restored wallet.</div>
         </div>
-        <button onclick="restoreWallet()" class="gael-btn-lift-orange" style="width:100%;padding:14px;background:linear-gradient(135deg,#e67e22,#f39c12);color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Restore from Backup</button>
+        <button id="btnRestoreWallet" class="gael-btn-lift-orange" style="width:100%;padding:14px;background:linear-gradient(135deg,#e67e22,#f39c12);color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Restore from Backup</button>
         <div id="restoreStatus" style="margin-top:14px;padding:12px;border-radius:8px;font-size:13px;display:none;"></div>
       </div>
       </div>
@@ -637,15 +637,15 @@ body {
 </div>
 <script src="app.js"></script>
 
-<div class="tx-modal-overlay" id="txModal" onclick="if(event.target===this)closeTxModal()">
+<div class="tx-modal-overlay" id="txModal">
   <div class="tx-modal">
-    <div class="tx-modal-title"><span id="txModalTitle">Transaction Details</span><span class="tx-modal-close" onclick="closeTxModal()">✕</span></div>
+    <div class="tx-modal-title"><span id="txModalTitle">Transaction Details</span><span id="btnTxModalClose" class="tx-modal-close">✕</span></div>
     <div id="txModalBody"></div>
   </div>
 </div>
 <div class="tx-modal-overlay" id="confirmModal">
   <div class="tx-modal" style="max-width:420px;">
-    <div class="tx-modal-title"><span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Confirm Transaction</span><span class="tx-modal-close" onclick="cancelSend()">✕</span></div>
+    <div class="tx-modal-title"><span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Confirm Transaction</span><span id="btnConfirmModalClose" class="tx-modal-close">✕</span></div>
     <div style="padding:20px;">
       <p style="color:var(--text-secondary);font-size:14px;margin-bottom:16px;">You are about to send:</p>
       <div style="background:var(--bg-primary);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px;">
@@ -657,8 +657,8 @@ body {
       </div>
       <p style="color:var(--red);font-size:12px;margin-bottom:20px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> This action cannot be undone. Please verify the address and amount carefully.</p>
       <div style="display:flex;gap:10px;">
-        <button onclick="cancelSend()" style="flex:1;padding:14px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;color:var(--text-secondary);font-size:15px;font-weight:600;cursor:pointer;">Cancel</button>
-        <button onclick="confirmSend()" style="flex:1;padding:14px;background:linear-gradient(135deg,var(--green),var(--green-light));color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Confirm Send</button>
+        <button id="btnCancelSend" style="flex:1;padding:14px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;color:var(--text-secondary);font-size:15px;font-weight:600;cursor:pointer;">Cancel</button>
+        <button id="btnConfirmSend" style="flex:1;padding:14px;background:linear-gradient(135deg,var(--green),var(--green-light));color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Confirm Send</button>
       </div>
     </div>
   </div>
