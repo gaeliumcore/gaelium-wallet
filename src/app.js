@@ -651,6 +651,7 @@ document.addEventListener('DOMContentLoaded', function() {
   function on(id, fn) {
     var el = document.getElementById(id);
     if (el) el.addEventListener('click', fn);
+    else console.warn('wiring: missing element', id);
   }
 
   // Window controls
