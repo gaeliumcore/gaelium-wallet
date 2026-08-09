@@ -16,6 +16,13 @@ const SELF_EXEC_PATH = process.env.PORTABLE_EXECUTABLE_FILE || process.env.APPIM
 const RPC_USER = 'gaelrpc';
 const RPC_PORT = 18080;
 
+// Market prices. Fetched apart from the balance handler so a slow or
+// unreachable CoinGecko never delays the wallet balance.
+const MARKET_IDS = 'bitcoin,ethereum,monero,dogecoin,gaelium';
+const MARKET_MIN_INTERVAL_MS = 60000;
+let marketCache = null;        // { prices, fetchedAt }
+let marketLastAttempt = 0;
+
 // Read existing password from config or generate once
 function getRpcPassword() {
   const dataDir = process.platform === 'win32' ? path.join(app.getPath('appData'), 'Gaelium') : path.join(require('os').homedir(), '.gaelium');
@@ -338,29 +345,7 @@ ipcMain.handle('rpc-getbalance', async () => {
     const miningInfo = await rpcCall('getmininginfo');
     const walletInfo = await rpcCall('getwalletinfo');
 
-    let btcPrice = 0, ethPrice = 0, xmrPrice = 0, dogePrice = 0, solPrice = 0, btcEur = 0, ethEur = 0, xmrEur = 0, dogeEur = 0, solEur = 0;
-    try {
-      const prices = await new Promise((res) => {
-        const req = https.request({hostname:'api.coingecko.com',path:'/api/v3/simple/price?ids=bitcoin,ethereum,monero,dogecoin,solana&vs_currencies=usd,eur',headers:{'User-Agent':'GaeliumWallet/1.0'}}, (r) => {
-          let b=''; r.on('data',c=>b+=c); r.on('end',()=>{try{res(JSON.parse(b));}catch(e){res(null);}});
-        }); req.on('error',()=>res(null)); req.end();
-      });
-      if(prices && prices.bitcoin) {
-        btcPrice = prices.bitcoin.usd;
-        ethPrice = prices.ethereum.usd;
-        xmrPrice = prices.monero.usd;
-        dogePrice = prices.dogecoin.usd;
-        solPrice = prices.solana.usd;
-        btcEur = prices.bitcoin.eur;
-        ethEur = prices.ethereum.eur;
-        xmrEur = prices.monero.eur;
-        dogeEur = prices.dogecoin.eur;
-        solEur = prices.solana.eur;
-      }
-    } catch(e) {}
-
     return {
-      btcPrice, ethPrice, xmrPrice, dogePrice, solPrice, btcEur, ethEur, xmrEur, dogeEur, solEur,
       balance: balance,
       unconfirmed: unconfirmed,
       immature: walletInfo.immature_balance || 0,
@@ -373,6 +358,71 @@ ipcMain.handle('rpc-getbalance', async () => {
   } catch (e) {
     return { error: e.message || String(e) };
   }
+});
+
+// Disk cache for market prices. Any failure here is swallowed: an absent or
+// unreadable cache is not an outage, it just means no fallback this time.
+function marketCachePath() {
+  return path.join(app.getPath('userData'), 'market-cache.json');
+}
+
+function writeMarketCache(entry) {
+  try {
+    const dir = app.getPath('userData');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(marketCachePath(), JSON.stringify({ prices: entry.prices, fetchedAt: entry.fetchedAt }));
+  } catch (e) {}
+}
+
+function readMarketCache() {
+  try {
+    const raw = fs.readFileSync(marketCachePath(), 'utf8');
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.prices) return { prices: parsed.prices, fetchedAt: parsed.fetchedAt || null };
+  } catch (e) {}
+  return null;
+}
+
+ipcMain.handle('get-market-prices', async () => {
+  const now = Date.now();
+  if (marketCache && (now - marketCache.fetchedAt) < MARKET_MIN_INTERVAL_MS) {
+    return { prices: marketCache.prices, fetchedAt: marketCache.fetchedAt, stale: false };
+  }
+  if ((now - marketLastAttempt) < MARKET_MIN_INTERVAL_MS) {
+    if (!marketCache) marketCache = readMarketCache();
+    if (marketCache) {
+      return { prices: marketCache.prices, fetchedAt: marketCache.fetchedAt, stale: true };
+    }
+    return { prices: null, fetchedAt: null, stale: true };
+  }
+  marketLastAttempt = now;
+  const fetched = await new Promise((res) => {
+    let done = false;
+    const finish = (v) => { if (!done) { done = true; res(v); } };
+    const req = https.request({
+      hostname: 'api.coingecko.com',
+      path: '/api/v3/simple/price?ids=' + MARKET_IDS + '&vs_currencies=usd,eur',
+      headers: { 'User-Agent': 'GaeliumWallet/1.0' }
+    }, (r) => {
+      if (r.statusCode !== 200) { r.resume(); finish(null); return; }
+      let b = '';
+      r.on('data', c => b += c);
+      r.on('end', () => { try { finish(JSON.parse(b)); } catch (e) { finish(null); } });
+    });
+    req.setTimeout(10000, () => { req.destroy(); finish(null); });
+    req.on('error', () => finish(null));
+    req.end();
+  });
+  if (fetched && fetched.bitcoin) {
+    marketCache = { prices: fetched, fetchedAt: Date.now() };
+    writeMarketCache(marketCache);
+    return { prices: marketCache.prices, fetchedAt: marketCache.fetchedAt, stale: false };
+  }
+  if (!marketCache) marketCache = readMarketCache();
+  if (marketCache) {
+    return { prices: marketCache.prices, fetchedAt: marketCache.fetchedAt, stale: true };
+  }
+  return { prices: null, fetchedAt: null, stale: true };
 });
 
 ipcMain.handle('rpc-listtransactions', async (event, count, skip) => {

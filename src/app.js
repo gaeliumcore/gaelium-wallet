@@ -200,6 +200,11 @@ function formatAmount(a) {
   p[0] = p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   return p.join('.');
 }
+function formatPrice(n, symbol) {
+  if (typeof n !== 'number' || !isFinite(n) || n <= 0) return '--';
+  if (n >= 0.01) return symbol + n.toLocaleString();
+  return symbol + n.toLocaleString(undefined, { maximumSignificantDigits: 4 });
+}
 function formatHash(h) {
   if (h >= 1e12) return (h/1e12).toFixed(2)+' TH/s';
   if (h >= 1e9) return (h/1e9).toFixed(2)+' GH/s';
@@ -336,7 +341,6 @@ async function updateDashboard() {
     document.getElementById('statDiff').textContent='Diff: '+parseFloat(d.difficulty).toFixed(4);
     document.getElementById('bottomPeers').textContent=d.connections;
     document.getElementById('bottomHash').textContent=formatHash(d.networkhashps);
-    if(d.btcPrice>0){document.getElementById('btcPrice').textContent='$'+d.btcPrice.toLocaleString();}if(d.ethPrice>0){document.getElementById('ethPrice').textContent='$'+d.ethPrice.toLocaleString();}if(d.xmrPrice>0){document.getElementById('xmrPrice').textContent='$'+d.xmrPrice.toLocaleString();}if(d.dogePrice>0){document.getElementById('dogePrice').textContent='$'+d.dogePrice.toLocaleString();}if(d.btcEur>0){document.getElementById('btcPriceEur').textContent='€'+d.btcEur.toLocaleString();}if(d.ethEur>0){document.getElementById('ethPriceEur').textContent='€'+d.ethEur.toLocaleString();}if(d.xmrEur>0){document.getElementById('xmrPriceEur').textContent='€'+d.xmrEur.toLocaleString();}if(d.dogeEur>0){document.getElementById('dogePriceEur').textContent='€'+d.dogeEur.toLocaleString();}
     const txs = await window.gaelium.listTransactions(30);
     if (!txs.error && txs.length>0) {
       lastTxList=filterChangeTx(txs.reverse().filter(tx=>tx.txid!=='9280011d752efed0c25a1d8a3fbd5d9ba50b953cac65f994b9d95437c9be6cfe')); let h=''; lastTxList.slice(0,8).forEach(tx => h+=buildTxItem(tx));
@@ -601,8 +605,44 @@ document.addEventListener('click', function(e) {
   const txItem = e.target.closest('.tx-item[data-txid]');
   if (txItem) showTxDetail(txItem.dataset.txid);
 });
+var MARKET_IDS_MAP = {
+  bitcoin: 'btc', ethereum: 'eth', monero: 'xmr',
+  dogecoin: 'doge', gaelium: 'gael'
+};
+
+async function updateMarketPrices() {
+  try {
+    var r = await window.gaelium.getMarketPrices();
+    var ageEl = document.getElementById('marketAge');
+    if (!r || !r.prices) {
+      for (var k in MARKET_IDS_MAP) {
+        document.getElementById(MARKET_IDS_MAP[k] + 'Price').textContent = '--';
+        var e = document.getElementById(MARKET_IDS_MAP[k] + 'PriceEur');
+        if (e) e.textContent = '--';
+      }
+      if (ageEl) ageEl.textContent = '';
+      return;
+    }
+    for (var id in MARKET_IDS_MAP) {
+      var p = r.prices[id];
+      var pre = MARKET_IDS_MAP[id];
+      if (!p) continue;
+      document.getElementById(pre + 'Price').textContent = formatPrice(p.usd, '$');
+      var eur = document.getElementById(pre + 'PriceEur');
+      if (eur) eur.textContent = formatPrice(p.eur, '\u20AC');
+    }
+    if (ageEl && !r.fetchedAt) ageEl.textContent = '';
+    if (ageEl && r.fetchedAt) {
+      var ageMin = Math.floor((Date.now() - r.fetchedAt) / 60000);
+      ageEl.textContent = ageMin >= 15 ? 'as of ' + new Date(r.fetchedAt).toLocaleTimeString() : '';
+    }
+  } catch (e) {}
+}
+
 updateDashboard();
 setInterval(updateDashboard, 10000);
+updateMarketPrices();
+setInterval(updateMarketPrices, 300000);
 
 // Event wiring, moved out of inline onclick attributes. Runs on DOMContentLoaded
 // because the modals are declared after the script tag and do not exist yet when
