@@ -203,7 +203,7 @@ function formatAmount(a) {
 function formatPrice(n, symbol) {
   if (typeof n !== 'number' || !isFinite(n) || n <= 0) return '--';
   if (n >= 0.01) return symbol + n.toLocaleString();
-  return symbol + n.toLocaleString(undefined, { maximumSignificantDigits: 4 });
+  return symbol + n.toLocaleString(undefined, { maximumSignificantDigits: 5 });
 }
 function formatHash(h) {
   if (h >= 1e12) return (h/1e12).toFixed(2)+' TH/s';
