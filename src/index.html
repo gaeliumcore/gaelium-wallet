@@ -490,6 +490,7 @@ body {
       <div class="page-title">Receive GAEL</div>
       <div class="receive-address-box">
         <div class="form-label">Your Gaelium Address</div>
+        <img id="receiveQr" alt="QR code of the receive address" style="display:none;width:180px;height:180px;image-rendering:pixelated;border-radius:8px;margin:0 auto 12px;">
         <div class="receive-address" id="receiveAddress">Loading...</div>
         <button id="btnCopyAddress" class="copy-btn">Copy Address</button>
       </div>
@@ -636,6 +637,7 @@ body {
   </div>
   <span>Gaelium Core v1.0.0</span>
 </div>
+<script src="vendor/qrcode.js"></script>
 <script src="app.js"></script>
 
 <div class="tx-modal-overlay" id="txModal">

@@ -168,8 +168,7 @@ function navigateTo(page) {
   document.getElementById('page-' + page).classList.add('active');
   document.querySelector('.nav-item[data-page="'+page+'"]').classList.add('active');
   // Clear sensitive data when navigating away from keys page
-  const exportedKey = document.getElementById('exportedKeyValue');
-  if (exportedKey) exportedKey.textContent='';
+  clearExportedKey('');
   const exportResult = document.getElementById('exportResult');
   if (exportResult) exportResult.style.display='none';
   if (page === 'receive') { loadReceiveAddress(); loadAddressHistory(); }
@@ -204,6 +203,46 @@ function formatPrice(n, symbol) {
   if (typeof n !== 'number' || !isFinite(n) || n <= 0) return '--';
   if (n >= 0.01) return symbol + n.toLocaleString();
   return symbol + n.toLocaleString(undefined, { maximumSignificantDigits: 5 });
+}
+// QR encoding. Parameters are those of the two mobile wallets so that the same
+// address yields the same symbol everywhere: error correction Q, a one module
+// quiet zone, UTF-8, black on opaque white. See wallet/android QrGenerator.kt
+// and wallet/ios QRCodeGenerator.swift.
+//
+// The payload is encoded BARE, never wrapped in a gaelium: URI. Android puts a
+// scanned payload straight into its field without stripping anything, so a
+// prefixed QR would simply be refused there.
+function qrDataUrl(payload, size) {
+  if (typeof qrcode !== 'function') return '';
+  if (!payload) return '';
+  try {
+    qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
+    var qr = qrcode(0, 'Q');
+    qr.addData(payload);
+    qr.make();
+    var count = qr.getModuleCount();
+    var margin = 1;
+    var total = count + margin * 2;
+    var scale = Math.max(1, Math.floor((size || 512) / total));
+    var edge = total * scale;
+    var canvas = document.createElement('canvas');
+    canvas.width = edge;
+    canvas.height = edge;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, edge, edge);
+    ctx.fillStyle = '#000000';
+    for (var row = 0; row < count; row++) {
+      for (var col = 0; col < count; col++) {
+        if (qr.isDark(row, col)) {
+          ctx.fillRect((col + margin) * scale, (row + margin) * scale, scale, scale);
+        }
+      }
+    }
+    return canvas.toDataURL('image/png');
+  } catch (e) {
+    return '';
+  }
 }
 function formatHash(h) {
   if (h >= 1e12) return (h/1e12).toFixed(2)+' TH/s';
@@ -348,6 +387,15 @@ async function updateDashboard() {
     } else { document.getElementById('txList').innerHTML='<div class="loading">No transactions yet</div>'; }
   } catch(e) { document.getElementById('balanceAddress').textContent='Connecting to daemon...'; }
 }
+// Single path for the receive address: whoever writes the text writes the QR.
+function setReceiveAddress(addr) {
+  document.getElementById('receiveAddress').textContent = addr;
+  var img = document.getElementById('receiveQr');
+  if (!img) return;
+  var url = qrDataUrl(addr, 512);
+  if (url) { img.src = url; img.style.display = 'block'; }
+  else { img.removeAttribute('src'); img.style.display = 'none'; }
+}
 async function loadReceiveAddress() {
   try {
     // Show last existing address, don't create a new one each time
@@ -355,11 +403,11 @@ async function loadReceiveAddress() {
     if (addrs && Array.isArray(addrs) && addrs.length > 0) {
       // Take the last address (most recently created)
       const last = addrs[addrs.length - 1];
-      document.getElementById('receiveAddress').textContent = last.address;
+      setReceiveAddress(last.address);
     } else {
       // No addresses at all - create the first one
       const a = await window.gaelium.getNewAddress('default');
-      if (!a.error) document.getElementById('receiveAddress').textContent = a;
+      if (!a.error) setReceiveAddress(a);
     }
   } catch(e) {}
 }
@@ -374,7 +422,7 @@ async function generateNewAddress() {
     const label = document.getElementById('newAddrLabel').value.trim();
     const a = await window.gaelium.getNewAddress(label);
     if (!a.error) {
-      document.getElementById('receiveAddress').textContent=a;
+      setReceiveAddress(a);
       document.getElementById('newAddrLabel').value='';
       // Add to top of ordered list
       const meta = await window.gaelium.loadAddressMeta();
@@ -457,6 +505,16 @@ async function importPrivateKey() {
         status.textContent = 'Error: ' + String(e);
       }
     }
+// One path clears the exported private key, text and QR together, and every
+// caller goes through it. A key that vanishes from the text but stays on screen
+// as a picture would be worse than no QR at all: the screen would look cleaned
+// when it is not.
+function clearExportedKey(text) {
+  var el = document.getElementById('exportedKeyValue');
+  if (el) el.textContent = text;
+  var img = document.getElementById('exportedKeyQr');
+  if (img) { img.removeAttribute('src'); img.style.display = 'none'; }
+}
 async function exportPrivateKey() {
   const addr = document.getElementById('exportAddress').value.trim();
   const status = document.getElementById('exportResult');
@@ -477,10 +535,13 @@ async function exportPrivateKey() {
       }
     } else {
       status.style.background='rgba(240,180,41,0.1)'; status.style.color='var(--yellow)';
-      status.innerHTML='<strong>Private Key:</strong><br><span id="exportedKeyValue" style="font-family:JetBrains Mono,monospace;word-break:break-all;font-size:12px;user-select:all;"></span><br><br><em style="font-size:11px;">Copy this key and store it safely. It will be cleared in 60 seconds.</em>';
+      status.innerHTML='<strong>Private Key:</strong><br><span id="exportedKeyValue" style="font-family:JetBrains Mono,monospace;word-break:break-all;font-size:12px;user-select:all;"></span><br><img id="exportedKeyQr" alt="QR code of the private key" style="display:none;width:180px;height:180px;image-rendering:pixelated;border-radius:8px;margin:12px 0;"><br><em style="font-size:11px;">Copy this key and store it safely. It will be cleared in 60 seconds.</em>';
       document.getElementById('exportedKeyValue').textContent=result;
-      // Auto-clear private key from DOM after 60 seconds
-      setTimeout(()=>{ const el=document.getElementById('exportedKeyValue'); if(el) el.textContent='[cleared]'; },60000);
+      const keyQr=document.getElementById('exportedKeyQr');
+      const keyQrUrl=qrDataUrl(result, 512);
+      if (keyQr && keyQrUrl) { keyQr.src=keyQrUrl; keyQr.style.display='block'; }
+      // Auto-clear private key from DOM after 60 seconds, text and QR together
+      setTimeout(()=>{ clearExportedKey('[cleared]'); },60000);
     }
   } catch(e) {
     status.style.background='var(--red-soft)'; status.style.color='var(--red)';
