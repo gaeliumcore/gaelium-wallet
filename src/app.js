@@ -108,6 +108,11 @@ async function unlockWallet() {
 }
 
 async function lockWallet() {
+  // Before anything else: locking the wallet must take the exported key off the
+  // screen, text and QR. Done before the await so it happens even if the daemon
+  // is slow or the call fails. Re-exporting is a click; a key left on a screen
+  // the user believes locked is not.
+  clearExportedKey('');
   const status = document.getElementById('unlockStatus');
   const result = await window.gaelium.walletLock();
   status.style.display='block';
