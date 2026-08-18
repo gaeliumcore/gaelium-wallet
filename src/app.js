@@ -580,6 +580,10 @@ async function exportPrivateKey() {
     }
     function closeTxModal() { document.getElementById('txModal').classList.remove('active'); }
 
+    // Id of the payment the main process has priced and is holding. The
+    // renderer never sees the transaction itself.
+    var pendingPlanId = null;
+
     async function sendTransaction() {
   const addr=document.getElementById('sendAddress').value.trim();
   const amt=parseFloat(document.getElementById('sendAmount').value);
@@ -590,10 +594,29 @@ async function exportPrivateKey() {
     const v=await window.gaelium.validateAddress(addr);
     if (!v.isvalid) { st.className='status-msg error'; st.textContent='Invalid Gaelium address'; return; }
   } catch(e) { st.className='status-msg error'; st.textContent='Could not validate address'; return; }
-  document.getElementById('confirmAmount').textContent=amt + ' GAEL';
-  document.getElementById('confirmAddress').textContent=addr;
-  document.getElementById('confirmFee').textContent='~0.003 GAEL';
-  document.getElementById('confirmTotal').textContent=(amt + 0.003).toFixed(3) + ' GAEL';
+  // Price the payment before showing anything. The dialog opens only once the
+  // daemon has funded the transaction, so the fee on screen is the fee that
+  // will be deducted, not an estimate.
+  btn.disabled=true; btn.textContent='Preparing...';
+  st.className='status-msg'; st.textContent='Preparing transaction...';
+  var plan;
+  try {
+    plan=await window.gaelium.prepareSend(addr,amt);
+  } catch(e) {
+    btn.disabled=false; btn.textContent='Send Transaction';
+    st.className='status-msg error'; st.textContent='Error: '+e.message; return;
+  }
+  btn.disabled=false; btn.textContent='Send Transaction';
+  if (!plan || plan.error) {
+    const errMsg = plan && plan.error ? (plan.error.message||plan.error) : 'Could not prepare the transaction';
+    st.className='status-msg error'; st.textContent='Error: '+errMsg; return;
+  }
+  st.className='status-msg'; st.textContent='';
+  pendingPlanId=plan.planId;
+  document.getElementById('confirmAmount').textContent=plan.amount.toFixed(8) + ' GAEL';
+  document.getElementById('confirmAddress').textContent=plan.address;
+  document.getElementById('confirmFee').textContent=plan.fee.toFixed(8) + ' GAEL';
+  document.getElementById('confirmTotal').textContent=plan.total.toFixed(8) + ' GAEL';
   document.getElementById('confirmModal').classList.add('active');
 }
 async function fillMaxAmount() {
@@ -607,16 +630,19 @@ async function fillMaxAmount() {
 }
 function cancelSend() {
   document.getElementById('confirmModal').classList.remove('active');
+  // Nothing to undo on the daemon side: pricing a payment reserves no output.
+  pendingPlanId=null;
 }
 async function confirmSend() {
   document.getElementById('confirmModal').classList.remove('active');
-  const addr=document.getElementById('sendAddress').value.trim();
-  const amt=parseFloat(document.getElementById('sendAmount').value);
   const st=document.getElementById('sendStatus');
   const btn=document.getElementById('sendBtn');
+  const planId=pendingPlanId;
+  pendingPlanId=null;
+  if (!planId) { st.className='status-msg error'; st.textContent='No prepared transaction. Start the payment again.'; return; }
   btn.disabled=true; btn.textContent='Sending...';
   try {
-    const tx=await window.gaelium.sendToAddress(addr,amt);
+    const tx=await window.gaelium.confirmSend(planId);
     if (tx.error) { const errMsg = tx.error.message||tx.error; if (String(errMsg).includes('Insufficient') || String(errMsg).includes('Amount exceeds')) { st.className='status-msg error'; st.textContent='Insufficient funds. Remember to account for the network fee (~0.003 GAEL).'; } else { st.className='status-msg error'; st.textContent='Error: '+errMsg; } }
     else {
       st.className='status-msg success'; st.textContent='Sent! TxID: '+tx.substring(0,24)+'...';

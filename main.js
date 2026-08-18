@@ -448,7 +448,37 @@ ipcMain.handle('rpc-listreceivedbyaddress', async () => {
   }
 });
 
-ipcMain.handle('rpc-sendtoaddress', async (event, address, amount) => {
+// Amounts are added in whole satoshis. A GAEL is 1e8 satoshis and both the
+// amount and the fee arrive with at most eight decimals, so converting each to
+// an integer number of satoshis is exact and avoids the binary floating point
+// drift of adding the two decimal values directly.
+function toSats(gael) {
+  return Math.round(gael * 1e8);
+}
+
+function addAmounts(a, b) {
+  return (toSats(a) + toSats(b)) / 1e8;
+}
+
+// A spend the daemon has already priced, waiting for the user to confirm it.
+// It stays in the main process: the renderer receives an opaque id and the
+// figures to display, never the transaction hex, so it cannot broadcast
+// anything that has not been priced first.
+let pendingSendPlan = null;
+const SEND_PLAN_TTL_MS = 5 * 60 * 1000;
+
+function planIsUsable(plan, planId, now) {
+  if (!plan) return false;
+  if (typeof planId !== 'string' || planId.length === 0) return false;
+  if (planId !== plan.planId) return false;
+  if (now - plan.createdAt > SEND_PLAN_TTL_MS) return false;
+  return true;
+}
+
+ipcMain.handle('rpc-preparesend', async (event, address, amount) => {
+  // Any previous plan is void the moment a new one is asked for, and stays
+  // void if this preparation fails.
+  pendingSendPlan = null;
   try {
     // Validate amount is a positive finite number
     if (typeof amount !== 'number' || !isFinite(amount) || amount <= 0) {
@@ -473,11 +503,46 @@ ipcMain.handle('rpc-sendtoaddress', async (event, address, amount) => {
     // Step 2: Create raw transaction (empty inputs, daemon will pick them)
     const rawTx = await rpcCall('createrawtransaction', [[], { [address]: amount }]);
 
-    // Step 3: Fund the transaction with changeAddress forced to source
+    // Step 3: Fund the transaction with changeAddress forced to source.
+    // lockUnspents is left at its default of false, so pricing a payment does
+    // not reserve any output and costs nothing to abandon.
     const funded = await rpcCall('fundrawtransaction', [rawTx, { changeAddress: changeAddress }]);
 
+    const planId = require('crypto').randomBytes(16).toString('hex');
+    pendingSendPlan = {
+      planId: planId,
+      hex: funded.hex,
+      fee: funded.fee,
+      amount: amount,
+      address: address,
+      createdAt: Date.now()
+    };
+
+    return {
+      planId: planId,
+      fee: funded.fee,
+      amount: amount,
+      total: addAmounts(amount, funded.fee),
+      address: address
+    };
+  } catch (e) {
+    return { error: e.message || String(e) };
+  }
+});
+
+ipcMain.handle('rpc-confirmsend', async (event, planId) => {
+  const plan = pendingSendPlan;
+  if (!planIsUsable(plan, planId, Date.now())) {
+    pendingSendPlan = null;
+    return { error: 'No valid prepared transaction. Prepare the payment again.' };
+  }
+  // Taken out of the module before anything is awaited, so a second confirm
+  // cannot find the same plan and broadcast the transaction twice. The plan is
+  // gone whether the broadcast succeeds or fails.
+  pendingSendPlan = null;
+  try {
     // Step 4: Sign the transaction
-    const signed = await rpcCall('signrawtransaction', [funded.hex]);
+    const signed = await rpcCall('signrawtransaction', [plan.hex]);
     if (!signed.complete) {
       return { error: 'Transaction signing failed. Is your wallet locked?' };
     }
