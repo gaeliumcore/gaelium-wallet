@@ -371,7 +371,25 @@ function getStartupPhase(errorMsg) {
   if (!_daemonHasAnswered) return 'Starting Gaelium Core...';
   return 'Waiting for Gaelium Core to answer...';
 }
+// setInterval fired every ten seconds whether or not the previous run had
+// finished. The batch it drives is four sequential calls with a ten second
+// deadline each, so it could take longer than the period and runs could pile up
+// on a daemon that was already too busy to answer. This flag makes overlap
+// impossible from any caller, not only from the scheduler.
+let _dashboardInFlight = false;
+// Period while the chain is up to date.
+const POLL_SYNCED_MS = 10000;
+// Period while it is not. A syncing daemon has nothing new to report ten seconds
+// later: the measured run advanced by sixteen blocks per poll for eight minutes
+// while the headers came in. Polling three times less often removes two thirds
+// of the load from the interval where every timeout was recorded, and costs
+// nothing but a slower moving number.
+const POLL_SYNCING_MS = 30000;
+let _pollDelayMs = POLL_SYNCED_MS;
+
 async function updateDashboard() {
+  if (_dashboardInFlight) return;
+  _dashboardInFlight = true;
   try {
     const d = await window.gaelium.getBalance();
     if (d.error) {
@@ -409,6 +427,7 @@ async function updateDashboard() {
     else _headersStableFor = 0;
     var headersComplete = _headersStableFor >= HEADERS_STABLE_POLLS;
     var syncing = d.headers > 0 && (d.headers - d.blocks) > 2;
+    _pollDelayMs = syncing ? POLL_SYNCING_MS : POLL_SYNCED_MS;
     var blocksEl = document.getElementById('statBlocks');
     var rewardEl = document.getElementById('statReward');
     if (syncing && !headersComplete) {
@@ -463,6 +482,15 @@ async function updateDashboard() {
       document.getElementById('txList').innerHTML=h;
     } else { document.getElementById('txList').innerHTML='<div class="loading">No transactions yet</div>'; }
   } catch(e) { document.getElementById('balanceAddress').textContent='Connecting to daemon...'; }
+  finally { _dashboardInFlight = false; }
+}
+
+// Schedules the next run only once the current one has settled, so the gap
+// between two runs is a real gap and never an overlap.
+function scheduleDashboard() {
+  updateDashboard().then(function() {
+    setTimeout(scheduleDashboard, _pollDelayMs);
+  });
 }
 // The address the Receive screen is showing. setReceiveAddress is the only
 // writer, which is what keeps the highlighted address and the QR in step.
@@ -939,8 +967,7 @@ async function updateMarketPrices() {
   } catch (e) {}
 }
 
-updateDashboard();
-setInterval(updateDashboard, 10000);
+scheduleDashboard();
 updateMarketPrices();
 setInterval(updateMarketPrices, 300000);
 
