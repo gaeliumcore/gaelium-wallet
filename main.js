@@ -530,6 +530,47 @@ ipcMain.handle('rpc-preparesend', async (event, address, amount) => {
   }
 });
 
+ipcMain.handle('rpc-maxamount', async () => {
+  try {
+    // Everything the wallet can spend right now.
+    const utxos = await rpcCall('listunspent', [0, 9999999]);
+    if (!utxos || utxos.length === 0) {
+      return { error: 'No funds available' };
+    }
+    const addrBalances = {};
+    utxos.forEach(u => {
+      addrBalances[u.address] = (addrBalances[u.address] || 0) + u.amount;
+    });
+    const destAddress = Object.keys(addrBalances).reduce((a, b) => addrBalances[a] > addrBalances[b] ? a : b);
+    const totalSats = utxos.reduce((s, u) => s + toSats(u.amount), 0);
+
+    // Ask the daemon to spend the whole balance and take the fee out of that
+    // same output. What is left in the output is the largest amount that can
+    // actually be sent. lockUnspents is left at its default of false.
+    const rawTx = await rpcCall('createrawtransaction', [[], { [destAddress]: totalSats / 1e8 }]);
+    const funded = await rpcCall('fundrawtransaction', [rawTx, { subtractFeeFromOutputs: [0] }]);
+
+    // Read the amount the daemon actually left in the output rather than
+    // assuming it equals the balance minus the fee.
+    const decoded = await rpcCall('decoderawtransaction', [funded.hex]);
+    let maxAmount = null;
+    for (const vout of decoded.vout) {
+      const addrs = (vout.scriptPubKey && vout.scriptPubKey.addresses) || [];
+      if (addrs.indexOf(destAddress) !== -1) {
+        maxAmount = vout.value;
+        break;
+      }
+    }
+    if (maxAmount === null) {
+      return { error: 'Could not read the funded output' };
+    }
+
+    return { maxAmount: maxAmount, fee: funded.fee };
+  } catch (e) {
+    return { error: e.message || String(e) };
+  }
+});
+
 ipcMain.handle('rpc-confirmsend', async (event, planId) => {
   const plan = pendingSendPlan;
   if (!planIsUsable(plan, planId, Date.now())) {

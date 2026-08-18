@@ -620,13 +620,27 @@ async function exportPrivateKey() {
   document.getElementById('confirmModal').classList.add('active');
 }
 async function fillMaxAmount() {
+  // The largest sendable amount is the whole balance minus the fee of the
+  // transaction that spends it, and that fee depends on how many outputs the
+  // spend consumes. Only the daemon knows, so it is asked rather than guessed.
+  const st=document.getElementById('sendStatus');
+  const btn=document.getElementById('btnFillMaxAmount');
+  const previous=btn?btn.textContent:null;
+  if (btn) { btn.disabled=true; btn.textContent='...'; }
   try {
-    const d = await window.gaelium.getBalance();
-    if (!d.error && d.balance > 0) {
-      const max = Math.max(0, d.balance - 0.01);
-      document.getElementById('sendAmount').value = max.toFixed(8);
+    const r = await window.gaelium.maxAmount();
+    if (!r || r.error) {
+      const errMsg = r && r.error ? (r.error.message||r.error) : 'Could not compute the maximum amount';
+      st.className='status-msg error'; st.textContent='Error: '+errMsg;
+      return;
     }
-  } catch(e) {}
+    document.getElementById('sendAmount').value = r.maxAmount.toFixed(8);
+    st.className='status-msg'; st.textContent='';
+  } catch(e) {
+    st.className='status-msg error'; st.textContent='Error: '+e.message;
+  } finally {
+    if (btn) { btn.disabled=false; btn.textContent=previous; }
+  }
 }
 function cancelSend() {
   document.getElementById('confirmModal').classList.remove('active');

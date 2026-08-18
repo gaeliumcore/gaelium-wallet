@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('gaelium', {
   getNewAddress: (label) => ipcRenderer.invoke('rpc-getnewaddress', label),
   prepareSend: (address, amount) => ipcRenderer.invoke('rpc-preparesend', address, amount),
   confirmSend: (planId) => ipcRenderer.invoke('rpc-confirmsend', planId),
+  maxAmount: () => ipcRenderer.invoke('rpc-maxamount'),
   validateAddress: (address) => ipcRenderer.invoke('rpc-validateaddress', address),
   importPrivKey: (key, label, rescan) => ipcRenderer.invoke('rpc-importprivkey', key, label, rescan),
   dumpPrivKey: (address) => ipcRenderer.invoke('rpc-dumpprivkey', address),
