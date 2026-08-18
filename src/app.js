@@ -348,13 +348,6 @@ let _daemonHasAnswered = false;
 let _syncTarget = 0;
 // Peer heights lag the tip by a block or two while one is being announced.
 const TARGET_TOLERANCE = 4;
-// Share of the progress figure the header phase is worth. Headers take about
-// forty five seconds and blocks about twenty minutes on the same machine, so
-// headers are a few per cent of the wait. Giving them five keeps the figure
-// moving during those seconds without overstating what they buy, and it means
-// one number that only ever goes up, rather than a bar that fills during the
-// headers and empties again when the blocks start.
-const HEADER_PHASE_SHARE = 5;
 
 // Agreed height, not highest. A single peer that is desynchronised, or lying,
 // must not be able to set the target on its own, so the value the most peers
@@ -496,58 +489,58 @@ async function updateChain() {
     // measure against. Falling through here would divide by a header count of
     // zero, decide that nothing is left to do, and announce a wallet synced at
     // block zero, which is the worst thing this screen could say.
-    var connecting = !haveTarget && d.connections === 0;
-    var syncing = !connecting && denom > 0 && (denom - d.blocks) > 2;
-    var headersComplete = d.headers >= denom - TARGET_TOLERANCE;
+    // The headers are done when they reach the height the peers announced. That
+    // is exact, unlike watching a counter stop moving, and it is the only thing
+    // the peer heights are still needed for. Its one limit: with no peer height
+    // at all, meaning every peer reporting minus one and none carrying a version
+    // height either, the phase never ends and the screen stays on preparing. A
+    // peer that has completed a handshake always carries one, so this is a
+    // degraded state rather than a reachable one, and it clears itself the
+    // moment any peer answers.
+    var headersComplete = haveTarget && d.headers >= _syncTarget - TARGET_TOLERANCE;
+    // Nothing worth counting exists before that point. Blocks sit at zero while
+    // the headers come in, so any figure drawn from them is either a frozen zero
+    // or a second scale disagreeing with the first.
+    var preparing = !headersComplete;
+    // Once the headers are in, the header count is the exact height of the
+    // chain, so it is the denominator. The peer figure was an announcement, this
+    // one is what the daemon holds.
+    denom = headersComplete ? d.headers : 0;
+    var syncing = headersComplete && denom > 0 && (denom - d.blocks) > 2;
     // The wallet is asked again the moment this changes, in either direction.
     // Coming out of a sync is when the final balance appears and the note under
     // it has to go, and waiting a full minute for the next wallet poll to notice
     // would be the one delay nobody would forgive.
-    var syncStateChanged = (syncing || connecting) !== _chainIsSyncing;
-    _chainIsSyncing = syncing || connecting;
-    if (connecting) _chainDelayMs = POLL_STARTUP_MS;
+    var syncStateChanged = (syncing || preparing) !== _chainIsSyncing;
+    _chainIsSyncing = syncing || preparing;
+    if (preparing) _chainDelayMs = POLL_HEADERS_MS;
     else if (!syncing) _chainDelayMs = POLL_SYNCED_MS;
-    else _chainDelayMs = headersComplete ? POLL_SYNCING_MS : POLL_HEADERS_MS;
+    else _chainDelayMs = POLL_SYNCING_MS;
     var blocksEl = document.getElementById('statBlocks');
     var rewardEl = document.getElementById('statReward');
     var blocksLabelEl = document.getElementById('statBlocksLabel');
-    if (connecting) {
+    if (preparing) {
+      // No number, no percentage, no bar. There is nothing yet that any of them
+      // could honestly be built from. The peer count under the tile is real and
+      // it climbs as the handshakes complete, and the hash rate and difficulty
+      // tiles fill in beside it.
       if (blocksLabelEl) blocksLabelEl.textContent = 'Block Height';
-      blocksEl.textContent = d.blocks.toLocaleString();
-      rewardEl.textContent = 'Connecting';
-      document.getElementById('syncText').textContent = 'Connecting to the network';
-      document.getElementById('bottomBlock').textContent = d.blocks.toLocaleString();
-      document.getElementById('balanceAddress').textContent = 'Connecting to the Gaelium network...';
+      blocksEl.textContent = '--';
+      rewardEl.textContent = d.connections === 1 ? '1 peer connected' : d.connections + ' peers connected';
+      document.getElementById('syncText').textContent = 'Preparing';
+      document.getElementById('bottomBlock').textContent = '--';
+      document.getElementById('balanceAddress').textContent = 'Connecting to the network and preparing to synchronize...';
     } else if (syncing) {
-      // One figure across both phases, so it only ever goes up. The headers are
-      // worth the first few per cent and the blocks the rest. The wording says
-      // which phase it is in, the number says how far along the whole thing is.
-      var pct = headersComplete
-        ? HEADER_PHASE_SHARE + (100 - HEADER_PHASE_SHARE) * (d.blocks / denom)
-        : HEADER_PHASE_SHARE * (d.headers / denom);
-      pct = Math.min(99.9, Math.max(0, pct)).toFixed(1);
-      // The tile counts whatever is moving. Blocks do not move at all while the
-      // headers come in, so showing them there left a zero sitting next to a
-      // rising percentage. It shows the header count during that phase and the
-      // block count afterwards, and the label above says which of the two it is
-      // so that headers are never mistaken for verified blocks. The denominator
-      // is the announced height in both phases and does not change.
-      //
-      // The bar underneath stays on the combined percentage throughout, so the
-      // one figure that answers how far along this is never moves backwards.
-      var counting = headersComplete ? d.blocks : d.headers;
-      var counter = counting.toLocaleString() + ' / ' + denom.toLocaleString();
-      if (blocksLabelEl) blocksLabelEl.textContent = headersComplete ? 'Block Height' : 'Block Headers';
+      // One scale, from zero to one hundred, filled once. The blocks are the
+      // only thing being counted and the exact height is the denominator.
+      var pct = Math.min(99.9, Math.max(0, (d.blocks / denom) * 100)).toFixed(1);
+      var counter = d.blocks.toLocaleString() + ' / ' + denom.toLocaleString();
+      if (blocksLabelEl) blocksLabelEl.textContent = 'Block Height';
       blocksEl.textContent = counter;
       rewardEl.innerHTML = '<div class="sync-progress-bar"><div class="sync-progress-fill" style="width:' + pct + '%"></div></div>';
       document.getElementById('bottomBlock').textContent = counter;
-      if (!headersComplete) {
-        document.getElementById('syncText').textContent = 'Headers ' + counter;
-        document.getElementById('balanceAddress').textContent = 'Downloading block headers (' + pct + '%)...';
-      } else {
-        document.getElementById('syncText').textContent = 'Syncing ' + counter + ' (' + pct + '%)';
-        document.getElementById('balanceAddress').textContent = 'Synchronizing with the Gaelium network (' + pct + '%)...';
-      }
+      document.getElementById('syncText').textContent = 'Syncing ' + counter + ' (' + pct + '%)';
+      document.getElementById('balanceAddress').textContent = 'Synchronizing with the Gaelium network (' + pct + '%)...';
     } else {
       if (blocksLabelEl) blocksLabelEl.textContent = 'Block Height';
       blocksEl.textContent = d.blocks.toLocaleString();
