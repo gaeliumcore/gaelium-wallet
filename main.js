@@ -776,18 +776,74 @@ ipcMain.handle('backup-wallet', async () => {
     return { error: e.message || String(e) };
   }
 });
-// Address metadata storage
+// Address metadata storage.
+//
+// The renderer hands over the whole contents of this file, so whatever it sends
+// is what lands on disk. Nothing checked it before. A single bad value, from a
+// bug or from anything that reached the renderer, was enough to leave the file
+// unreadable and take the address ordering with it.
+//
+// Mainnet Gaelium addresses are base58check over version byte 38 for a public
+// key hash and 122 for a script hash, which puts them at exactly 34 characters
+// beginning with G or r. There is no bech32 form and this wallet has no testnet
+// mode, so those two shapes are the whole set.
+const ADDRESS_SHAPE = /^[Gr][123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{33}$/;
+// Long enough for the names the field suggests, short enough that the file
+// cannot be inflated through it.
+const MAX_LABEL_LENGTH = 64;
+// A desktop address book that outgrows this is a bug, not a use case.
+const MAX_ADDRESS_ENTRIES = 1000;
+
+// Returns a copy holding only what belongs in the file. Every entry is judged on
+// its own, so one bad address costs itself and nothing else. Keys other than
+// order and labels are not carried over, because nothing writes any.
+function sanitizeAddressMeta(data) {
+  const clean = { order: [], labels: {} };
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return clean;
+  const seen = new Set();
+  const order = Array.isArray(data.order) ? data.order : [];
+  for (const entry of order) {
+    if (typeof entry !== 'string' || !ADDRESS_SHAPE.test(entry)) continue;
+    if (seen.has(entry)) continue;
+    if (clean.order.length >= MAX_ADDRESS_ENTRIES) break;
+    seen.add(entry);
+    clean.order.push(entry);
+  }
+  const labels = (data.labels && typeof data.labels === 'object' && !Array.isArray(data.labels)) ? data.labels : {};
+  let labelCount = 0;
+  for (const addr of Object.keys(labels)) {
+    if (!ADDRESS_SHAPE.test(addr)) continue;
+    const label = labels[addr];
+    if (typeof label !== 'string') continue;
+    if (labelCount >= MAX_ADDRESS_ENTRIES) break;
+    // Trimmed rather than dropped, so an over long name keeps the address
+    // recognisable instead of losing its name altogether.
+    clean.labels[addr] = label.slice(0, MAX_LABEL_LENGTH);
+    labelCount++;
+  }
+  return clean;
+}
+
 ipcMain.handle('load-address-meta', async () => {
   try {
     const metaPath = path.join(getDataDir(), 'addresses.json');
-    if (fs.existsSync(metaPath)) return JSON.parse(fs.readFileSync(metaPath, 'utf8'));
-    return {};
-  } catch(e) { return {}; }
+    // Also cleaned on the way in, because the renderer sends back what it was
+    // given and a file that predates this check would otherwise be written out
+    // again untouched.
+    if (fs.existsSync(metaPath)) return sanitizeAddressMeta(JSON.parse(fs.readFileSync(metaPath, 'utf8')));
+    return { order: [], labels: {} };
+  } catch(e) { return { order: [], labels: {} }; }
 });
 ipcMain.handle('save-address-meta', async (event, data) => {
   try {
     const metaPath = path.join(getDataDir(), 'addresses.json');
-    fs.writeFileSync(metaPath, JSON.stringify(data, null, 2));
+    const clean = sanitizeAddressMeta(data);
+    // Written beside the target and renamed onto it. Rename replaces the file in
+    // one step on both platforms, so an interrupted write leaves the previous
+    // contents rather than half of the new ones.
+    const tmpPath = metaPath + '.tmp';
+    fs.writeFileSync(tmpPath, JSON.stringify(clean, null, 2));
+    fs.renameSync(tmpPath, metaPath);
     return { success: true };
   } catch(e) { return { error: e.message }; }
 });
