@@ -273,6 +273,10 @@ body {
   background: var(--bg-card); border: 1px solid var(--border);
   border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 18px;
 }
+.receive-label {
+  font-size: 13px; font-weight: 600; color: var(--green-light);
+  margin-bottom: 10px; overflow-wrap: anywhere;
+}
 .receive-address {
   font-family: 'JetBrains Mono', monospace; font-size: 15px;
   color: var(--green-light); word-break: break-all; margin-bottom: 12px;
@@ -496,6 +500,7 @@ body {
       <div class="page-title">Receive GAEL</div>
       <div class="receive-address-box">
         <div class="form-label">Your Gaelium Address</div>
+        <div class="receive-label" id="receiveLabel" style="display:none;"></div>
         <img id="receiveQr" alt="QR code of the receive address" style="display:none;width:180px;height:180px;image-rendering:pixelated;border-radius:8px;margin:0 auto 12px;">
         <div class="receive-address" id="receiveAddress">Loading...</div>
         <button id="btnCopyAddress" class="copy-btn">Copy Address</button>

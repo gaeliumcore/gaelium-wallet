@@ -396,6 +396,30 @@ async function updateDashboard() {
 // writer, which is what keeps the highlighted address and the QR in step.
 let selectedReceiveAddress = null;
 
+// Labels belong to the daemon, not to addresses.json, which holds a labels map
+// that nothing has ever written. They are kept here as a plain map, filled when
+// the history is loaded, so that the label of the selected address can be read
+// without waiting. An asynchronous lookup inside setReceiveAddress could answer
+// after a later selection and leave a label from one address beside the QR code
+// of another.
+let addressLabels = {};
+
+// Puts the label of the selected address above the QR code, or hides the line
+// when there is none. The text is user supplied and is placed with textContent,
+// never built into an HTML string.
+function applySelectedAddressLabel() {
+  const el = document.getElementById('receiveLabel');
+  if (!el) return;
+  const label = addressLabels[selectedReceiveAddress];
+  if (typeof label === 'string' && label.length > 0) {
+    el.textContent = label;
+    el.style.display = 'block';
+  } else {
+    el.textContent = '';
+    el.style.display = 'none';
+  }
+}
+
 // Applies the current selection to whatever rows the history holds right now.
 // Called both when the selection changes and when the list is rebuilt, because
 // the two are loaded in parallel and either one can finish first.
@@ -412,6 +436,7 @@ function setReceiveAddress(addr) {
   selectedReceiveAddress = addr;
   document.getElementById('receiveAddress').textContent = addr;
   markSelectedAddressRow();
+  applySelectedAddressLabel();
   var img = document.getElementById('receiveQr');
   if (!img) return;
   var url = qrDataUrl(addr, 512);
@@ -464,6 +489,14 @@ async function loadAddressHistory() {
   try {
     const addrs = await window.gaelium.listReceivedByAddress();
     if (addrs.error || !Array.isArray(addrs)) return;
+    // The one place that learns labels from the daemon, so the one place that
+    // fills the map. Rebuilt rather than merged, so a label removed on the
+    // daemon side stops being shown here.
+    addressLabels = {};
+    addrs.forEach(a => {
+      const l = a.label || a.account;
+      if (typeof l === 'string' && l.length > 0) addressLabels[a.address] = l;
+    });
     const container = document.getElementById('addressHistory');
     if (addrs.length === 0) { container.innerHTML='<div style="color:var(--text-muted);font-size:13px;">No addresses yet.</div>'; return; }
     let html = '';
@@ -492,6 +525,7 @@ async function loadAddressHistory() {
       });
     });
     markSelectedAddressRow();
+    applySelectedAddressLabel();
   } catch(e) { console.error('loadAddressHistory error:', e); }
 }
 async function importPrivateKey() {
