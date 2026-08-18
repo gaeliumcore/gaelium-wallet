@@ -504,40 +504,40 @@ function peerHeight(p) {
   return Math.max(started, synced);
 }
 
-ipcMain.handle('rpc-getbalance', async () => {
+// Two questions, asked apart, because one of them is slow and the other is not.
+//
+// Measured across seventy eight polls of a chain syncing from block zero, the
+// chain calls never took more than 3.4 milliseconds while the wallet calls hit
+// the ten second deadline on a third of them. Both used to travel in one batch,
+// so a slow wallet blanked the block height, the peer count and the hash rate
+// as well, and greyed the whole screen. The chain answers on its own now, and
+// the wallet cannot drag it down.
+ipcMain.handle('rpc-chainstate', async () => {
   try {
-    // Four calls where there were six, and not because they run together. They
-    // are still sequential on purpose: the daemon serves RPC from a small pool
-    // of threads, so sending more at once during a sync would queue rather than
-    // help. Two of the six were asking for what another call in the same batch
-    // was already about to return. getwalletinfo carries the three balances and
-    // getblockchaininfo carries the difficulty.
-    //
-    // getbalance is the one that mattered. Measured against a chain syncing from
-    // block zero it accounted for every single failure, timing out at the ten
-    // second deadline on a third of the polls, and one failure loses the whole
-    // batch.
     const info = await rpcCall('getblockchaininfo');
     const peers = await rpcCall('getpeerinfo');
     const miningInfo = await rpcCall('getmininginfo');
-    const walletInfo = await rpcCall('getwalletinfo');
-
-    // getpeerinfo also gives the connection count, so getnetworkinfo is no
-    // longer asked for. It costs 2.2 milliseconds against 0.8, which buys the
-    // one thing the wallet was missing: what the network says the chain height
-    // is, known from the first handshake instead of guessed at from a header
-    // counter that climbs for a minute.
     const peerList = Array.isArray(peers) ? peers : [];
+    return {
+      blocks: info.blocks,
+      headers: info.headers,
+      difficulty: info.difficulty,
+      connections: peerList.length,
+      networkhashps: miningInfo.networkhashps,
+      peerHeights: peerList.map(peerHeight).filter(h => h > 0)
+    };
+  } catch (e) {
+    return { error: e.message || String(e) };
+  }
+});
+
+ipcMain.handle('rpc-walletstate', async () => {
+  try {
+    const walletInfo = await rpcCall('getwalletinfo');
     return {
       balance: walletInfo.balance,
       unconfirmed: walletInfo.unconfirmed_balance || 0,
-      immature: walletInfo.immature_balance || 0,
-      blocks: info.blocks,
-      headers: info.headers,
-      connections: peerList.length,
-      networkhashps: miningInfo.networkhashps,
-      difficulty: info.difficulty,
-      peerHeights: peerList.map(peerHeight).filter(h => h > 0)
+      immature: walletInfo.immature_balance || 0
     };
   } catch (e) {
     return { error: e.message || String(e) };
