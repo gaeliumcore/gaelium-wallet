@@ -595,7 +595,14 @@ async function exportPrivateKey() {
       rows+='<div class="tx-modal-row"><span class="tx-modal-label">Status</span><span class="tx-modal-value">'+escapeHtml(status)+'</span></div>';
       rows+='<div class="tx-modal-row"><span class="tx-modal-label">Amount</span><span class="tx-modal-value" style="color:'+(tx.amount>=0?'var(--green-light)':'var(--red)')+'">'+escapeHtml(formatAmount(tx.amount))+' GAEL</span></div>';
       if(tx.fee) rows+='<div class="tx-modal-row"><span class="tx-modal-label">Fee</span><span class="tx-modal-value">'+escapeHtml(tx.fee)+' GAEL</span></div>';
-      rows+='<div class="tx-modal-row"><span class="tx-modal-label">Address</span><span class="tx-modal-value">'+escapeHtml(tx.address||'N/A')+'</span></div>';
+      const hasAddress = typeof tx.address === 'string' && tx.address.length > 0;
+      // Clickable only when there is something to open. An absent address stays
+      // plain text rather than becoming a link that leads nowhere.
+      rows+='<div class="tx-modal-row"><span class="tx-modal-label">Address</span>'
+        + (hasAddress
+            ? '<span class="tx-modal-value tx-modal-link" role="link" tabindex="0" title="Open on the explorer" data-explorer-address="'+escapeHtml(tx.address)+'">'+escapeHtml(tx.address)+'</span>'
+            : '<span class="tx-modal-value">N/A</span>')
+        + '</div>';
       rows+='<div class="tx-modal-row"><span class="tx-modal-label">Transaction ID</span><span class="tx-modal-value" style="font-size:11px;">'+escapeHtml(tx.txid)+'</span></div>';
       rows+='<div class="tx-modal-row"><span class="tx-modal-label">Confirmations</span><span class="tx-modal-value">'+escapeHtml(tx.confirmations||0)+'</span></div>';
       if(tx.blockhash) rows+='<div class="tx-modal-row"><span class="tx-modal-label">Block Hash</span><span class="tx-modal-value" style="font-size:11px;">'+escapeHtml(tx.blockhash)+'</span></div>';
@@ -603,8 +610,10 @@ async function exportPrivateKey() {
       if(tx.time) rows+='<div class="tx-modal-row"><span class="tx-modal-label">Date</span><span class="tx-modal-value">'+escapeHtml(new Date(tx.time*1000).toLocaleString())+'</span></div>';
       if(TXID_SHAPE.test(tx.txid||'')) {
         rows+='<button type="button" class="explorer-btn" data-explorer-txid="'+escapeHtml(tx.txid)+'">View on explorer</button>';
-        rows+='<div class="status-msg" id="txExplorerStatus"></div>';
       }
+      // Outside the test above, because the address row can report a failure
+      // even when the transaction id is not usable.
+      rows+='<div class="status-msg" id="txExplorerStatus"></div>';
       document.getElementById('txModalBody').innerHTML=rows;
       document.getElementById('txModalTitle').textContent=status;
       document.getElementById('txModal').classList.add('active');
@@ -752,8 +761,31 @@ document.addEventListener('click', function(e) {
   // so it is reached by the same delegation rather than rewired each time. Only
   // the id travels to the main process, never an address.
   const explorerBtn = e.target.closest('[data-explorer-txid]');
-  if (explorerBtn) openTxOnExplorer(explorerBtn.dataset.explorerTxid);
+  if (explorerBtn) { openTxOnExplorer(explorerBtn.dataset.explorerTxid); return; }
+  const explorerAddr = e.target.closest('[data-explorer-address]');
+  if (explorerAddr) openAddressOnExplorer(explorerAddr.dataset.explorerAddress);
 });
+// Keyboard equivalent, since the address row is a link rather than a button.
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const explorerAddr = e.target.closest && e.target.closest('[data-explorer-address]');
+  if (!explorerAddr) return;
+  e.preventDefault();
+  openAddressOnExplorer(explorerAddr.dataset.explorerAddress);
+});
+async function openAddressOnExplorer(address) {
+  const s = document.getElementById('txExplorerStatus');
+  try {
+    const r = await window.gaelium.openExplorerAddress(address);
+    if (r && r.error) {
+      if (s) { s.className='status-msg error'; s.textContent='Could not open the explorer: '+r.error; }
+      return;
+    }
+    if (s) s.className='status-msg';
+  } catch (err) {
+    if (s) { s.className='status-msg error'; s.textContent='Could not open the explorer: '+String(err); }
+  }
+}
 async function openTxOnExplorer(txid) {
   const s = document.getElementById('txExplorerStatus');
   try {

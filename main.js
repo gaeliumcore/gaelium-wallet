@@ -646,6 +646,34 @@ ipcMain.handle('open-explorer-tx', async (event, txid) => {
   }
 });
 
+ipcMain.handle('open-explorer-address', async (event, address) => {
+  if (typeof address !== 'string' || address.length === 0) {
+    return { error: 'Invalid address' };
+  }
+  // The daemon is the only authority on the shape of a Gaelium address, so it
+  // is asked rather than guessed at. If it cannot answer, nothing opens. There
+  // is deliberately no local pattern to fall back on: a second rule written
+  // here could disagree with the first and would be the weaker of the two.
+  let verdict;
+  try {
+    verdict = await rpcCall('validateaddress', [address]);
+  } catch (e) {
+    return { error: e.message || String(e) };
+  }
+  if (!verdict || verdict.isvalid !== true) {
+    return { error: 'Invalid address' };
+  }
+  try {
+    // Escaped as well, even though a valid address is base58 and has nothing to
+    // escape. It costs nothing and it means the daemon's answer is not the only
+    // thing standing between the renderer and the string handed to the system.
+    await shell.openExternal(EXPLORER_BASE_URL + '/address/' + encodeURIComponent(address));
+    return { ok: true };
+  } catch (e) {
+    return { error: e.message || String(e) };
+  }
+});
+
 ipcMain.handle('rpc-maxamount', async () => {
   // The largest amount the send path can actually prepare. The send path always
   // asks fundrawtransaction for a change output, so the maximum has to be the
