@@ -455,8 +455,10 @@ const WALLET_SYNCING_MS = 60000;
 const WALLET_SYNCED_MS = 10000;
 let _walletDelayMs = POLL_STARTUP_MS;
 // Written by the chain poll, read by the wallet poll. Neither waits on the
-// other, they only share this one fact.
-let _chainIsSyncing = false;
+// other, they only share this one fact. It starts true so that a balance shown
+// before the chain has said anything carries the warning rather than passing
+// itself off as final.
+let _chainIsSyncing = true;
 
 let _chainInFlight = false;
 async function updateChain() {
@@ -490,14 +492,31 @@ async function updateChain() {
     // counter stands in. It lasts a second or two.
     var haveTarget = target > 0;
     var denom = haveTarget ? target : d.headers;
-    var syncing = denom > 0 && (denom - d.blocks) > 2;
+    // No peer has answered and our own chain is empty, so there is nothing to
+    // measure against. Falling through here would divide by a header count of
+    // zero, decide that nothing is left to do, and announce a wallet synced at
+    // block zero, which is the worst thing this screen could say.
+    var connecting = !haveTarget && d.connections === 0;
+    var syncing = !connecting && denom > 0 && (denom - d.blocks) > 2;
     var headersComplete = d.headers >= denom - TARGET_TOLERANCE;
-    _chainIsSyncing = syncing;
-    if (!syncing) _chainDelayMs = POLL_SYNCED_MS;
+    // The wallet is asked again the moment this changes, in either direction.
+    // Coming out of a sync is when the final balance appears and the note under
+    // it has to go, and waiting a full minute for the next wallet poll to notice
+    // would be the one delay nobody would forgive.
+    var syncStateChanged = (syncing || connecting) !== _chainIsSyncing;
+    _chainIsSyncing = syncing || connecting;
+    if (connecting) _chainDelayMs = POLL_STARTUP_MS;
+    else if (!syncing) _chainDelayMs = POLL_SYNCED_MS;
     else _chainDelayMs = headersComplete ? POLL_SYNCING_MS : POLL_HEADERS_MS;
     var blocksEl = document.getElementById('statBlocks');
     var rewardEl = document.getElementById('statReward');
-    if (syncing) {
+    if (connecting) {
+      blocksEl.textContent = d.blocks.toLocaleString();
+      rewardEl.textContent = 'Connecting';
+      document.getElementById('syncText').textContent = 'Connecting to the network';
+      document.getElementById('bottomBlock').textContent = d.blocks.toLocaleString();
+      document.getElementById('balanceAddress').textContent = 'Connecting to the Gaelium network...';
+    } else if (syncing) {
       // One figure across both phases, so it only ever goes up. The headers are
       // worth the first few per cent and the blocks the rest. The wording says
       // which phase it is in, the number says how far along the whole thing is.
@@ -528,6 +547,7 @@ async function updateChain() {
     document.getElementById('statDiff').textContent='Diff: '+parseFloat(d.difficulty).toFixed(4);
     document.getElementById('bottomPeers').textContent=d.connections;
     document.getElementById('bottomHash').textContent=formatHash(d.networkhashps);
+    if (syncStateChanged) updateWallet();
   } catch(e) {
     markStale(CHAIN_STALE_IDS, true);
   }
