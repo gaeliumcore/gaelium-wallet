@@ -467,9 +467,31 @@ ipcMain.handle('get-market-prices', async () => {
   return { prices: null, fetchedAt: null, stale: true };
 });
 
+// Listing bounds. The daemon builds the whole result in memory before it
+// answers, so a large count is not just a slow query. These values were passed
+// through untouched, which meant a string, a fraction, a negative number or a
+// billion all reached the daemon as they came.
+const DEFAULT_TX_COUNT = 10;
+const MAX_TX_COUNT = 1000;
+const MAX_TX_SKIP = 100000;
+
+// Anything that is not a whole number at or above the floor becomes the
+// fallback, and anything past the ceiling is pulled back to it. Nothing is ever
+// forwarded as it arrived.
+function boundListParam(value, fallback, min, max) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  const i = Math.trunc(n);
+  if (i < min) return fallback;
+  if (i > max) return max;
+  return i;
+}
+
 ipcMain.handle('rpc-listtransactions', async (event, count, skip) => {
   try {
-    return await rpcCall('listtransactions', ['*', count || 10, skip || 0]);
+    const safeCount = boundListParam(count, DEFAULT_TX_COUNT, 1, MAX_TX_COUNT);
+    const safeSkip = boundListParam(skip, 0, 0, MAX_TX_SKIP);
+    return await rpcCall('listtransactions', ['*', safeCount, safeSkip]);
   } catch (e) {
     return { error: e.message || String(e) };
   }
