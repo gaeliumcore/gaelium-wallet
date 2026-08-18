@@ -311,14 +311,6 @@ function buildTxItem(tx) {
 // what makes it safe to say nothing until then.
 const FAILURE_NOTICE_AFTER = 3;
 let _consecutiveFailures = 0;
-// One missed poll does not make a figure stale. Measured on a chain syncing from
-// block zero, getblockchaininfo timed out on twenty two polls out of a hundred
-// and four and never twice in a row, so greying on the first miss made the
-// counters blink through the whole of the header phase while nothing was wrong
-// with any of the numbers on screen. Two in a row is already more than that run
-// ever produced, and the message still waits for three.
-const STALE_AFTER_MISSES = 2;
-let _walletFailures = 0;
 // Forty times the three seconds a normal start takes. This is measured in
 // elapsed time rather than in attempts, because a count of attempts changes
 // meaning whenever the polling period changes.
@@ -333,42 +325,6 @@ const _walletStartedAt = Date.now();
 // Shown only while the daemon has never answered, and taken down the moment it
 // does. There is no path that leaves it up, because every successful poll hides
 // it whether or not it was ever shown.
-// During the preparing phase the peer count climbs for the first few seconds and
-// then nothing on the screen moves at all for the remaining forty. An elapsed
-// count is the one thing left that is both true and continuous. It claims no
-// progress, it only says the wallet is still there and how long it has been
-// waiting, which is the question someone watching a still screen is asking.
-let _preparingSince = null;
-let _preparingTimer = null;
-// Preparing is the only state that carries no progress of its own, so it is the
-// only one that could sit still without anyone noticing. Past this it gives way
-// to whatever is known, a block count of zero against a header count if that is
-// all there is, rather than staying mute.
-//
-// Three minutes is four times the forty five seconds a header phase took on a
-// real machine, and it only ever fires when the block count has failed to move
-// at all in that time, which the criterion above says cannot happen while the
-// daemon is working. It is a floor under the screen, not a mechanism.
-const PREPARING_CEILING_MS = 180000;
-let _preparingStartedAt = null;
-// Latched, so the screen does not swing back to mute three minutes later.
-let _preparingExpired = false;
-function drawPreparing() {
-  var el = document.getElementById('syncText');
-  if (!el || _preparingSince === null) return;
-  el.textContent = 'Preparing, ' + Math.floor((Date.now() - _preparingSince) / 1000) + 's';
-}
-function setPreparing(on) {
-  if (on) {
-    if (_preparingSince === null) _preparingSince = Date.now();
-    drawPreparing();
-    if (_preparingTimer === null) _preparingTimer = setInterval(drawPreparing, 1000);
-    return;
-  }
-  if (_preparingTimer !== null) { clearInterval(_preparingTimer); _preparingTimer = null; }
-  _preparingSince = null;
-}
-
 function showStartupNotice(show) {
   var el = document.getElementById('startupNotice');
   if (el) el.classList.toggle('visible', show);
@@ -377,10 +333,94 @@ function showStartupNotice(show) {
 // running, whatever a later poll says, so no message may claim it is starting.
 let _daemonHasAnswered = false;
 
+// The height the network says the chain is at. Every peer announces it in its
+// version message, so it is known within seconds of the first connection, long
+// before the local header counter has finished climbing. Using it as the
+// denominator makes the percentage true from the first poll instead of after a
+// minute, and removes the target that used to grow under it in steps of two
+// thousand.
+//
+// verificationprogress cannot serve as a substitute. Gaelium ships chainTxData
+// as three zeroes, which makes GuessVerificationProgress divide nChainTx by
+// itself, so the value is exactly one from the genesis block onward. It was
+// measured at one for the whole of a sync from block zero to block thirty
+// thousand.
+let _syncTarget = 0;
+// Peer heights lag the tip by a block or two while one is being announced.
+const TARGET_TOLERANCE = 4;
+// Share of the progress figure the header phase is worth. Headers take about
+// forty five seconds and blocks about twenty minutes on the same machine, so
+// headers are a few per cent of the wait. Giving them five keeps the figure
+// moving during those seconds without overstating what they buy, and it means
+// one number that only ever goes up, rather than a bar that fills during the
+// headers and empties again when the blocks start.
+const HEADER_PHASE_SHARE = 5;
+
+// Agreed height, not highest. A single peer that is desynchronised, or lying,
+// must not be able to set the target on its own, so the value the most peers
+// report wins and a tie goes to the higher one.
+function agreedHeight(heights) {
+  const counts = {};
+  heights.forEach(function(h) { counts[h] = (counts[h] || 0) + 1; });
+  let best = 0, bestCount = 0;
+  Object.keys(counts).forEach(function(k) {
+    const h = Number(k), c = counts[k];
+    if (c > bestCount || (c === bestCount && h > best)) { best = h; bestCount = c; }
+  });
+  return best;
+}
+
+function updateSyncTarget(heights, localBlocks) {
+  if (heights && heights.length) {
+    const agreed = agreedHeight(heights);
+    if (agreed > _syncTarget) {
+      _syncTarget = agreed;
+    } else if (agreed > 0 && agreed < _syncTarget && Math.max.apply(null, heights) <= agreed) {
+      // Comes down only when no peer at all still claims the higher figure,
+      // which is what a reorganisation looks like from here. Otherwise the
+      // target never goes backwards.
+      _syncTarget = agreed;
+    }
+  }
+  // Our own chain having passed it is proof the target was too low.
+  if (localBlocks > _syncTarget) _syncTarget = localBlocks;
+  return _syncTarget;
+}
+
+// The counters keep the values of the last poll that succeeded. A failed poll
+// leaves them on screen, so they have to be marked as not current rather than
+// sitting next to a fresh message as though they had just been read.
+const STALE_IDS = ['statBlocks', 'statHash', 'statPeers', 'statDiff', 'bottomBlock', 'bottomPeers', 'bottomHash'];
+function markCountersStale(stale) {
+  STALE_IDS.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('stale', stale);
+    if (stale) el.title = 'Last known value. The daemon did not answer the latest poll.';
+    else el.removeAttribute('title');
+  });
+}
+
+function getStartupPhase(errorMsg) {
+  var m = String(errorMsg).toLowerCase();
+  if (m.includes('loading wallet')) return 'Loading wallet...';
+  if (m.includes('loading block')) return 'Loading block index...';
+  if (m.includes('verifying')) return 'Verifying blocks...';
+  if (m.includes('loading') || m.includes('rewinding') || m.includes('rescanning')) return 'Loading...';
+  // A timed out call is not a daemon that failed to start. It is a daemon busy
+  // enough that it did not answer within the deadline, which is what happens
+  // for minutes on end while the block headers come in.
+  if (m.includes('timeout')) return 'Gaelium Core is busy, waiting for it to answer...';
+  // Only reachable before the daemon has ever answered.
+  if (!_daemonHasAnswered) return 'Starting Gaelium Core...';
+  return 'Waiting for Gaelium Core to answer...';
+}
 // setInterval fired every ten seconds whether or not the previous run had
-// finished, so runs could pile up on a daemon that was already too busy to
-// answer. Each of the two polls now carries its own in flight flag, which makes
-// overlap impossible from any caller and not only from its scheduler.
+// finished. The batch it drives is four sequential calls with a ten second
+// deadline each, so it could take longer than the period and runs could pile up
+// on a daemon that was already too busy to answer. This flag makes overlap
+// impossible from any caller, not only from the scheduler.
+let _dashboardInFlight = false;
 // Period while the chain is up to date.
 const POLL_SYNCED_MS = 10000;
 // Period while it is not. A syncing daemon has nothing new to report ten seconds
@@ -404,33 +444,41 @@ const POLL_STARTUP_MS = 1500;
 // asking every five seconds there costs nothing worth counting.
 const POLL_HEADERS_MS = 5000;
 // Starts fast and stays fast until the first answer arrives.
-let _chainDelayMs = POLL_STARTUP_MS;
+let _pollDelayMs = POLL_STARTUP_MS;
 
-// The wallet is asked apart and far less often while the chain is behind. Its
-// figures cannot settle before the sync does, and it is the only part of the
-// poll that was ever slow: it took the whole ten second deadline on a third of
-// the measured polls while the chain calls stayed under four milliseconds. Once
-// the chain is up to date it goes back to the same ten seconds as before, so
-// nothing about a wallet in normal use changes.
-const WALLET_SYNCING_MS = 60000;
-const WALLET_SYNCED_MS = 10000;
-let _walletDelayMs = POLL_STARTUP_MS;
-// Written by the chain poll, read by the wallet poll. Neither waits on the
-// other, they only share this one fact. It starts true so that a balance shown
-// before the chain has said anything carries the warning rather than passing
-// itself off as final.
-let _chainIsSyncing = true;
-
-let _chainInFlight = false;
-async function updateChain() {
-  if (_chainInFlight) return;
-  _chainInFlight = true;
+async function updateDashboard() {
+  if (_dashboardInFlight) return;
+  _dashboardInFlight = true;
   try {
-    const d = await window.gaelium.getChainState();
+    // getBalance was split in two on the main side, one call for the chain and
+    // one for the wallet, so that a slow wallet could not blank the chain
+    // figures. Both are asked here and recomposed into the single object this
+    // function has always consumed, and a failure on either side is reported the
+    // way getBalance reported one, so nothing below this line changes.
+    const c = await window.gaelium.getChainState();
+    const w = c.error ? null : await window.gaelium.getWalletState();
+    const d = c.error ? { error: c.error } : (w.error ? { error: w.error } : {
+      balance: w.balance,
+      unconfirmed: w.unconfirmed,
+      immature: w.immature,
+      blocks: c.blocks,
+      headers: c.headers,
+      connections: c.connections,
+      networkhashps: c.networkhashps,
+      difficulty: c.difficulty,
+      // The chain call no longer carries the heights the peers announce. Without
+      // them the target below stays unset and the denominator falls back to the
+      // header count, which is what this screen showed before those heights
+      // existed. Its known defect, a denominator that climbs in batches of two
+      // thousand, comes back with it.
+      peerHeights: []
+    });
     if (d.error) {
       _consecutiveFailures++;
-      if (_consecutiveFailures >= STALE_AFTER_MISSES) markStale(CHAIN_STALE_IDS, true);
+      markCountersStale(true);
       if (!_daemonHasAnswered) {
+        // Before the first answer the phase text is the only sign of life there
+        // is, so it goes on screen every time.
         var phase = getStartupPhase(d.error);
         var waited = Date.now() - _walletStartedAt;
         if (waited > SLOW_START_NOTICE_MS) showStartupNotice(true);
@@ -438,162 +486,534 @@ async function updateChain() {
         document.getElementById('balanceAddress').textContent = waited > UNREACHABLE_AFTER_MS
           ? 'Unable to connect to Gaelium daemon. Please restart the wallet or check your firewall settings.'
           : phase;
-        _chainDelayMs = POLL_STARTUP_MS;
       } else if (_consecutiveFailures >= FAILURE_NOTICE_AFTER) {
         document.getElementById('balanceAddress').textContent = 'Still waiting for Gaelium Core to answer...';
       }
+      // Keep asking quickly until there has been a first answer. The slower
+      // period is for a daemon that is running, not for one still starting.
+      if (!_daemonHasAnswered) _pollDelayMs = POLL_STARTUP_MS;
+      // A missed poll on its own changes nothing else. The main text goes on
+      // saying what the last answer said and the greyed counters carry the rest,
+      // because one poll that did not come back is plumbing, not news.
       return;
     }
     _consecutiveFailures = 0;
     _daemonHasAnswered = true;
-    markStale(CHAIN_STALE_IDS, false);
+    markCountersStale(false);
     showStartupNotice(false);
-    // The daemon says where it is without being asked twice. While it downloads
-    // headers the block count stays at zero, and the moment it starts validating
-    // it moves. Both figures come from getblockchaininfo, the one call this
-    // screen cannot do without and the one that always ends up answering, so
-    // the phase no longer depends on anything a second call has to supply.
-    //
-    // A wallet that is already up to date has a block count from its first
-    // answer, so it never sees the preparing state at all. That is the intended
-    // behaviour: there is nothing to prepare and nothing to wait for.
-    //
-    // The one second or so at the very start where the count is legitimately
-    // zero is the preparing state, which is exactly what it is for.
-    var preparing = d.blocks === 0 && !_preparingExpired;
-    if (preparing) {
-      if (_preparingStartedAt === null) _preparingStartedAt = Date.now();
-      if (Date.now() - _preparingStartedAt > PREPARING_CEILING_MS) {
-        _preparingExpired = true;
-        preparing = false;
-      }
-    } else {
-      _preparingStartedAt = null;
-    }
-    // A daemon holding blocks it has no headers for is not a state this daemon
-    // produces, headers always run ahead. Taking the larger of the two costs
-    // nothing and means the denominator can never be smaller than the numerator.
-    var denom = Math.max(d.headers, d.blocks);
-    var syncing = !preparing && denom > 0 && (denom - d.blocks) > 2;
-    // The wallet is asked again the moment this changes, in either direction.
-    // Coming out of a sync is when the final balance appears and the note under
-    // it has to go, and waiting a full minute for the next wallet poll to notice
-    // would be the one delay nobody would forgive.
-    var syncStateChanged = (syncing || preparing) !== _chainIsSyncing;
-    _chainIsSyncing = syncing || preparing;
-    if (preparing) _chainDelayMs = POLL_HEADERS_MS;
-    else if (!syncing) _chainDelayMs = POLL_SYNCED_MS;
-    else _chainDelayMs = POLL_SYNCING_MS;
-    var blocksEl = document.getElementById('statBlocks');
-    var rewardEl = document.getElementById('statReward');
-    var blocksLabelEl = document.getElementById('statBlocksLabel');
-    if (preparing) {
-      // No number, no percentage, no bar. There is nothing yet that any of them
-      // could honestly be built from. The peer count under the tile is real and
-      // it climbs as the handshakes complete, and the hash rate and difficulty
-      // tiles fill in beside it.
-      if (blocksLabelEl) blocksLabelEl.textContent = 'Block Height';
-      blocksEl.textContent = '--';
-      rewardEl.textContent = d.connections === null ? 'Connecting'
-        : (d.connections === 1 ? '1 peer connected' : d.connections + ' peers connected');
-      setPreparing(true);
-      document.getElementById('bottomBlock').textContent = '--';
-      document.getElementById('balanceAddress').textContent = 'Connecting to the network and preparing to synchronize...';
-    } else if (syncing) {
-      setPreparing(false);
-      // One scale, from zero to one hundred, filled once. The blocks are the
-      // only thing being counted and the exact height is the denominator.
-      var pct = Math.min(99.9, Math.max(0, (d.blocks / denom) * 100)).toFixed(1);
-      var counter = d.blocks.toLocaleString() + ' / ' + denom.toLocaleString();
-      if (blocksLabelEl) blocksLabelEl.textContent = 'Block Height';
-      blocksEl.textContent = counter;
-      rewardEl.innerHTML = '<div class="sync-progress-bar"><div class="sync-progress-fill" style="width:' + pct + '%"></div></div>';
-      document.getElementById('bottomBlock').textContent = counter;
-      document.getElementById('syncText').textContent = 'Syncing ' + counter + ' (' + pct + '%)';
-      document.getElementById('balanceAddress').textContent = 'Synchronizing with the Gaelium network (' + pct + '%)...';
-    } else {
-      setPreparing(false);
-      if (blocksLabelEl) blocksLabelEl.textContent = 'Block Height';
-      blocksEl.textContent = d.blocks.toLocaleString();
-      rewardEl.textContent = 'Reward: 1,000 GAEL';
-      document.getElementById('syncText').textContent = 'Synced at block ' + d.blocks;
-      document.getElementById('bottomBlock').textContent = d.blocks;
-      document.getElementById('balanceAddress').textContent = 'Connected to the Gaelium Core Network (GAEL)';
-    }
-    // A call that did not answer leaves its own tile alone rather than writing
-    // a null over a figure that was right a moment ago.
-    if (d.networkhashps !== null && d.networkhashps !== undefined) {
-      document.getElementById('statHash').textContent=formatHash(d.networkhashps);
-      document.getElementById('bottomHash').textContent=formatHash(d.networkhashps);
-    }
-    if (d.connections !== null && d.connections !== undefined) {
-      document.getElementById('statPeers').textContent=d.connections;
-      document.getElementById('bottomPeers').textContent=d.connections;
-    }
-    document.getElementById('statDiff').textContent='Diff: '+parseFloat(d.difficulty).toFixed(4);
-    if (syncStateChanged) updateWallet();
-  } catch(e) {
-    markStale(CHAIN_STALE_IDS, true);
-  }
-  finally { _chainInFlight = false; }
-}
-
-let _walletInFlight = false;
-async function updateWallet() {
-  if (_walletInFlight) return;
-  _walletInFlight = true;
-  try {
-    const w = await window.gaelium.getWalletState();
-    // A wallet that did not answer greys its own figure and touches nothing
-    // else. The main line belongs to the chain poll and stays as it was.
-    if (w.error) {
-      _walletFailures++;
-      // Same rule on this side. The wallet calls were the ones timing out in the
-      // earlier measurement, and a balance that did not refresh once is not a
-      // balance worth marking as doubtful.
-      if (_walletFailures >= STALE_AFTER_MISSES) markStale(WALLET_STALE_IDS, true);
-      if (!_daemonHasAnswered) _walletDelayMs = POLL_STARTUP_MS;
-      return;
-    }
-    _walletFailures = 0;
-    markStale(WALLET_STALE_IDS, false);
-    _walletDelayMs = _chainIsSyncing ? WALLET_SYNCING_MS : WALLET_SYNCED_MS;
-    document.getElementById('balanceAmount').innerHTML=formatAmount(w.balance)+'<span class="balance-currency"> GAEL</span>';
+    // Passed a zero rather than the local block count, because letting our own
+    // chain raise the target with no peer heights to check it against makes the
+    // target equal the block count, the difference zero, and the screen announce
+    // a wallet synced at whatever block it happens to be validating. Sooner a
+    // moving denominator than a false statement.
+    var target = updateSyncTarget(d.peerHeights, 0);
+    // Until a peer has answered there is no announced height, so the old header
+    // counter stands in. It lasts a second or two.
+    var haveTarget = target > 0;
+    var denom = haveTarget ? target : d.headers;
+    var syncing = denom > 0 && (denom - d.blocks) > 2;
+    var headersComplete = d.headers >= denom - TARGET_TOLERANCE;
+    if (!syncing) _pollDelayMs = POLL_SYNCED_MS;
+    else _pollDelayMs = headersComplete ? POLL_SYNCING_MS : POLL_HEADERS_MS;
+    document.getElementById('balanceAmount').innerHTML=formatAmount(d.balance)+'<span class="balance-currency"> GAEL</span>';
     let pp=[];
-    if (w.unconfirmed>0) pp.push('Pending: '+formatAmount(w.unconfirmed)+' GAEL');
-    if (w.immature>0) pp.push('Immature: '+formatAmount(w.immature)+' GAEL');
+    if (d.unconfirmed>0) pp.push('Pending: '+formatAmount(d.unconfirmed)+' GAEL');
+    if (d.immature>0) pp.push('Immature: '+formatAmount(d.immature)+' GAEL');
     // A wallet restored from a backup or from an imported key reads zero for the
     // whole of the sync, which is correct and alarming at the same time. Said
     // here rather than in a banner, next to the figure it is about.
-    if (_chainIsSyncing) pp.push('Not final until the sync completes');
+    if (syncing) pp.push('Not final until the sync completes');
     document.getElementById('balancePending').textContent=pp.join(' | ');
+    var blocksEl = document.getElementById('statBlocks');
+    var rewardEl = document.getElementById('statReward');
+    if (syncing) {
+      // One figure across both phases, so it only ever goes up. The headers are
+      // worth the first few per cent and the blocks the rest. The wording says
+      // which phase it is in, the number says how far along the whole thing is.
+      var pct = headersComplete
+        ? HEADER_PHASE_SHARE + (100 - HEADER_PHASE_SHARE) * (d.blocks / denom)
+        : HEADER_PHASE_SHARE * (d.headers / denom);
+      pct = Math.min(99.9, Math.max(0, pct)).toFixed(1);
+      var counter = d.blocks.toLocaleString() + ' / ' + denom.toLocaleString();
+      blocksEl.textContent = counter;
+      rewardEl.innerHTML = '<div class="sync-progress-bar"><div class="sync-progress-fill" style="width:' + pct + '%"></div></div>';
+      document.getElementById('bottomBlock').textContent = counter;
+      if (!headersComplete) {
+        document.getElementById('syncText').textContent = 'Headers ' + d.headers.toLocaleString() + ' / ' + denom.toLocaleString();
+        document.getElementById('balanceAddress').textContent = 'Downloading block headers (' + pct + '%)...';
+      } else {
+        document.getElementById('syncText').textContent = 'Syncing ' + counter + ' (' + pct + '%)';
+        document.getElementById('balanceAddress').textContent = 'Synchronizing with the Gaelium network (' + pct + '%)...';
+      }
+    } else {
+      blocksEl.textContent = d.blocks.toLocaleString();
+      rewardEl.textContent = 'Reward: 1,000 GAEL';
+      document.getElementById('syncText').textContent = 'Synced \u2014 Block ' + d.blocks;
+      document.getElementById('bottomBlock').textContent = d.blocks;
+      document.getElementById('balanceAddress').textContent = 'Connected to the Gaelium Core Network (GAEL)';
+    }
+    document.getElementById('statHash').textContent=formatHash(d.networkhashps);
+    document.getElementById('statPeers').textContent=d.connections;
+    document.getElementById('statDiff').textContent='Diff: '+parseFloat(d.difficulty).toFixed(4);
+    document.getElementById('bottomPeers').textContent=d.connections;
+    document.getElementById('bottomHash').textContent=formatHash(d.networkhashps);
     const txs = await window.gaelium.listTransactions(30);
     if (!txs.error && txs.length>0) {
       lastTxList=filterChangeTx(txs.reverse().filter(tx=>tx.txid!=='9280011d752efed0c25a1d8a3fbd5d9ba50b953cac65f994b9d95437c9be6cfe')); let h=''; lastTxList.slice(0,8).forEach(tx => h+=buildTxItem(tx));
       document.getElementById('txList').innerHTML=h;
-    } else if (!txs.error) {
-      document.getElementById('txList').innerHTML='<div class="loading">No transactions yet</div>';
+    } else { document.getElementById('txList').innerHTML='<div class="loading">No transactions yet</div>'; }
+  } catch(e) { document.getElementById('balanceAddress').textContent='Connecting to daemon...'; }
+  finally { _dashboardInFlight = false; }
+}
+
+// Schedules the next run only once the current one has settled, so the gap
+// between two runs is a real gap and never an overlap.
+function scheduleDashboard() {
+  updateDashboard().then(function() {
+    setTimeout(scheduleDashboard, _pollDelayMs);
+  });
+}
+// The address the Receive screen is showing. setReceiveAddress is the only
+// writer, which is what keeps the highlighted address and the QR in step.
+let selectedReceiveAddress = null;
+
+// Labels belong to the daemon, not to addresses.json, which holds a labels map
+// that nothing has ever written. They are kept here as a plain map, filled when
+// the history is loaded, so that the label of the selected address can be read
+// without waiting. An asynchronous lookup inside setReceiveAddress could answer
+// after a later selection and leave a label from one address beside the QR code
+// of another.
+let addressLabels = {};
+
+// Puts the label of the selected address above the QR code, or hides the line
+// when there is none. The text is user supplied and is placed with textContent,
+// never built into an HTML string.
+function applySelectedAddressLabel() {
+  const el = document.getElementById('receiveLabel');
+  if (!el) return;
+  const label = addressLabels[selectedReceiveAddress];
+  if (typeof label === 'string' && label.length > 0) {
+    el.textContent = label;
+    el.style.display = 'block';
+  } else {
+    el.textContent = '';
+    el.style.display = 'none';
+  }
+}
+
+// Applies the current selection to whatever rows the history holds right now.
+// Called both when the selection changes and when the list is rebuilt, because
+// the two are loaded in parallel and either one can finish first.
+function markSelectedAddressRow() {
+  const container = document.getElementById('addressHistory');
+  if (!container) return;
+  container.querySelectorAll('[data-copy-addr]').forEach(el => {
+    el.classList.toggle('selected', el.dataset.copyAddr === selectedReceiveAddress);
+  });
+}
+
+// Single path for the receive address: whoever writes the text writes the QR.
+function setReceiveAddress(addr) {
+  selectedReceiveAddress = addr;
+  document.getElementById('receiveAddress').textContent = addr;
+  markSelectedAddressRow();
+  applySelectedAddressLabel();
+  var img = document.getElementById('receiveQr');
+  if (!img) return;
+  var url = qrDataUrl(addr, 512);
+  if (url) { img.src = url; img.style.display = 'block'; }
+  else { img.removeAttribute('src'); img.style.display = 'none'; }
+}
+async function loadReceiveAddress() {
+  try {
+    // Show last existing address, don't create a new one each time
+    const addrs = await window.gaelium.listReceivedByAddress();
+    if (addrs && Array.isArray(addrs) && addrs.length > 0) {
+      // Take the last address (most recently created)
+      const last = addrs[addrs.length - 1];
+      setReceiveAddress(last.address);
+    } else {
+      // No addresses at all - create the first one
+      const a = await window.gaelium.getNewAddress('default');
+      if (!a.error) setReceiveAddress(a);
+    }
+  } catch(e) {}
+}
+function copyAddress() {
+  if (!selectedReceiveAddress) return;
+  navigator.clipboard.writeText(selectedReceiveAddress);
+  const s=document.getElementById('receiveStatus');
+  s.className='status-msg success'; s.textContent='Address copied!';
+  setTimeout(()=>s.className='status-msg',3000);
+}
+async function generateNewAddress() {
+  try {
+    const label = document.getElementById('newAddrLabel').value.trim();
+    const a = await window.gaelium.getNewAddress(label);
+    if (!a.error) {
+      setReceiveAddress(a);
+      document.getElementById('newAddrLabel').value='';
+      // Add to top of ordered list
+      const meta = await window.gaelium.loadAddressMeta();
+      const order = meta.order || [];
+      if (!order.includes(a)) order.unshift(a);
+      meta.order = order;
+      await window.gaelium.saveAddressMeta(meta);
+      const s=document.getElementById('receiveStatus');
+      s.className='status-msg success'; s.textContent='New address generated!';
+      setTimeout(()=>s.className='status-msg',3000);
+      loadAddressHistory();
+    }
+  } catch(e) {}
+}
+async function loadAddressHistory() {
+  try {
+    const addrs = await window.gaelium.listReceivedByAddress();
+    if (addrs.error || !Array.isArray(addrs)) return;
+    // The one place that learns labels from the daemon, so the one place that
+    // fills the map. Rebuilt rather than merged, so a label removed on the
+    // daemon side stops being shown here.
+    addressLabels = {};
+    addrs.forEach(a => {
+      const l = a.label || a.account;
+      if (typeof l === 'string' && l.length > 0) addressLabels[a.address] = l;
+    });
+    const container = document.getElementById('addressHistory');
+    if (addrs.length === 0) { container.innerHTML='<div style="color:var(--text-muted);font-size:13px;">No addresses yet.</div>'; return; }
+    let html = '';
+    addrs.reverse();
+    addrs.forEach(a => {
+      const label = a.label || a.account || '';
+      const safeLabel = escapeHtml(label);
+      const labelDisplay = label ? '<span style="color:var(--green-light);font-weight:600;">'+safeLabel+'</span> - ' : '';
+      const addr = a.address;
+      const safeAddr = escapeHtml(addr);
+      const sa = addr.length>34 ? addr.substring(0,16)+'...'+addr.substring(addr.length-8) : addr;
+      const safeSa = escapeHtml(sa);
+      html += '<div class="addr-row" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;" data-copy-addr="'+safeAddr+'">';
+      html += '<div style="flex:1;min-width:0;"><div style="font-size:13px;">'+labelDisplay+'<span style="font-family:JetBrains Mono,monospace;color:var(--text-secondary);font-size:12px;">'+safeSa+'</span></div>';
+      html += '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;"><span class="copy-hint">Click to copy</span></div></div></div>';
+    });
+    container.innerHTML=html;
+    container.querySelectorAll('[data-copy-addr]').forEach(el => {
+      el.addEventListener('click', function() {
+        // Selecting redraws the address and the QR together, then the copy
+        // happens exactly as it did before.
+        setReceiveAddress(this.dataset.copyAddr);
+        navigator.clipboard.writeText(this.dataset.copyAddr);
+        const hint = this.querySelector('span.copy-hint');
+        if (hint) { hint.textContent='Copied!'; setTimeout(()=>hint.textContent='Click to copy',2000); }
+      });
+    });
+    markSelectedAddressRow();
+    applySelectedAddressLabel();
+  } catch(e) { console.error('loadAddressHistory error:', e); }
+}
+async function importPrivateKey() {
+      const key = document.getElementById('importKeyInput').value.trim();
+      const label = document.getElementById('importKeyLabel').value.trim();
+      const status = document.getElementById('importStatus');
+      
+      if (!key) {
+        status.style.display = 'block';
+        status.style.background = 'var(--red-soft)';
+        status.style.color = 'var(--red)';
+        status.textContent = 'Please enter a private key';
+        return;
+      }
+      
+      status.style.display = 'block';
+      status.style.background = 'var(--green-soft)';
+      status.style.color = 'var(--green-light)';
+      status.textContent = 'Importing key and scanning blockchain... This may take a few minutes.';
+
+      try {
+        const result = await window.gaelium.importPrivKey(key, label, true);
+        if (result && result.error) {
+          status.style.background = 'var(--red-soft)';
+          status.style.color = 'var(--red)';
+          status.textContent = 'Error: ' + result.error;
+        } else {
+          status.style.background = 'var(--green-soft)';
+          status.style.color = 'var(--green-light)';
+          status.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Private key imported successfully!';
+          document.getElementById('importKeyInput').value = '';
+          document.getElementById('importKeyLabel').value = '';
+          updateDashboard();
+        }
+      } catch(e) {
+        status.style.background = 'var(--red-soft)';
+        status.style.color = 'var(--red)';
+        status.textContent = 'Error: ' + String(e);
+      }
+    }
+// One path clears the exported private key, text and QR together, and every
+// caller goes through it. A key that vanishes from the text but stays on screen
+// as a picture would be worse than no QR at all: the screen would look cleaned
+// when it is not.
+function clearExportedKey(text) {
+  var el = document.getElementById('exportedKeyValue');
+  if (el) el.textContent = text;
+  var img = document.getElementById('exportedKeyQr');
+  if (img) { img.removeAttribute('src'); img.style.display = 'none'; }
+}
+async function exportPrivateKey() {
+  const addr = document.getElementById('exportAddress').value.trim();
+  const status = document.getElementById('exportResult');
+  if (!addr) {
+    status.style.display='block'; status.style.background='var(--red-soft)'; status.style.color='var(--red)';
+    status.textContent='Please enter a Gaelium address.'; return;
+  }
+  status.style.display='block'; status.style.background='var(--green-soft)'; status.style.color='var(--green-light)';
+  status.textContent='Retrieving private key...';
+  try {
+    const result = await window.gaelium.dumpPrivKey(addr);
+    if (result && result.error) {
+      status.style.background='var(--red-soft)'; status.style.color='var(--red)';
+      if (result.error.includes('not known') || result.error.includes('not found')) {
+        status.textContent='Error: This address is not in your wallet.';
+      } else {
+        status.textContent='Error: ' + result.error;
+      }
+    } else {
+      status.style.background='rgba(240,180,41,0.1)'; status.style.color='var(--yellow)';
+      status.innerHTML='<strong>Private Key:</strong><br><span id="exportedKeyValue" style="font-family:JetBrains Mono,monospace;word-break:break-all;font-size:12px;user-select:all;"></span><br><img id="exportedKeyQr" alt="QR code of the private key" style="display:none;width:180px;height:180px;image-rendering:pixelated;border-radius:8px;margin:12px 0;"><br><em style="font-size:11px;">Copy this key and store it safely. It will be cleared in 60 seconds.</em>';
+      document.getElementById('exportedKeyValue').textContent=result;
+      const keyQr=document.getElementById('exportedKeyQr');
+      const keyQrUrl=qrDataUrl(result, 512);
+      if (keyQr && keyQrUrl) { keyQr.src=keyQrUrl; keyQr.style.display='block'; }
+      // Auto-clear private key from DOM after 60 seconds, text and QR together
+      setTimeout(()=>{ clearExportedKey('[cleared]'); },60000);
     }
   } catch(e) {
-    markStale(WALLET_STALE_IDS, true);
+    status.style.background='var(--red-soft)'; status.style.color='var(--red)';
+    status.textContent='Error: ' + String(e);
   }
-  finally { _walletInFlight = false; }
 }
 
-// Two loops, each arming its own next run only once its own current one has
-// settled. Neither ever waits on the other, and neither can overlap itself.
-function scheduleChain() {
-  updateChain().then(function() { setTimeout(scheduleChain, _chainDelayMs); });
-}
-function scheduleWallet() {
-  updateWallet().then(function() { setTimeout(scheduleWallet, _walletDelayMs); });
-}
-// Kept for the places that refresh after an action and want both at once.
-function updateDashboard() {
-  updateChain();
-  updateWallet();
-}
+    
+    var lastTxList = [];
+    // Same shape the main process enforces. Checked here only to decide whether
+    // to draw the button at all, so that a transaction without a usable id shows
+    // no link rather than a link that leads nowhere. The check that matters is
+    // the one in the main process.
+    const TXID_SHAPE = /^[0-9a-fA-F]{64}$/;
+    function showTxDetail(txid) {
+      const tx = lastTxList.find(t=>t.txid===txid);
+      if(!tx) return;
+      let status = tx.category;
+      if(tx.category==='generate') status='Mined (Confirmed)';
+      if(tx.category==='immature') status='Immature (Pending Maturity)';
+      if(tx.category==='send') status='Sent';
+      if(tx.category==='receive') status='Received';
+      let rows = '';
+      rows+='<div class="tx-modal-row"><span class="tx-modal-label">Status</span><span class="tx-modal-value">'+escapeHtml(status)+'</span></div>';
+      rows+='<div class="tx-modal-row"><span class="tx-modal-label">Amount</span><span class="tx-modal-value" style="color:'+(tx.amount>=0?'var(--green-light)':'var(--red)')+'">'+escapeHtml(formatAmount(tx.amount))+' GAEL</span></div>';
+      if(tx.fee) rows+='<div class="tx-modal-row"><span class="tx-modal-label">Fee</span><span class="tx-modal-value">'+escapeHtml(tx.fee)+' GAEL</span></div>';
+      const hasAddress = typeof tx.address === 'string' && tx.address.length > 0;
+      // Clickable only when there is something to open. An absent address stays
+      // plain text rather than becoming a link that leads nowhere.
+      rows+='<div class="tx-modal-row"><span class="tx-modal-label">Address</span>'
+        + (hasAddress
+            ? '<span class="tx-modal-value tx-modal-link" role="link" tabindex="0" title="Open on the explorer" data-explorer-address="'+escapeHtml(tx.address)+'">'+escapeHtml(tx.address)+'</span>'
+            : '<span class="tx-modal-value">N/A</span>')
+        + '</div>';
+      rows+='<div class="tx-modal-row"><span class="tx-modal-label">Transaction ID</span><span class="tx-modal-value" style="font-size:11px;">'+escapeHtml(tx.txid)+'</span></div>';
+      rows+='<div class="tx-modal-row"><span class="tx-modal-label">Confirmations</span><span class="tx-modal-value">'+escapeHtml(tx.confirmations||0)+'</span></div>';
+      if(tx.blockhash) rows+='<div class="tx-modal-row"><span class="tx-modal-label">Block Hash</span><span class="tx-modal-value" style="font-size:11px;">'+escapeHtml(tx.blockhash)+'</span></div>';
+      if(tx.blockheight) rows+='<div class="tx-modal-row"><span class="tx-modal-label">Block Height</span><span class="tx-modal-value">'+escapeHtml(tx.blockheight)+'</span></div>';
+      if(tx.time) rows+='<div class="tx-modal-row"><span class="tx-modal-label">Date</span><span class="tx-modal-value">'+escapeHtml(new Date(tx.time*1000).toLocaleString())+'</span></div>';
+      if(TXID_SHAPE.test(tx.txid||'')) {
+        rows+='<button type="button" class="explorer-btn" data-explorer-txid="'+escapeHtml(tx.txid)+'">View on explorer</button>';
+      }
+      // Outside the test above, because the address row can report a failure
+      // even when the transaction id is not usable.
+      rows+='<div class="status-msg" id="txExplorerStatus"></div>';
+      document.getElementById('txModalBody').innerHTML=rows;
+      document.getElementById('txModalTitle').textContent=status;
+      document.getElementById('txModal').classList.add('active');
+    }
+    function closeTxModal() { document.getElementById('txModal').classList.remove('active'); }
 
+    // Id of the payment the main process has priced and is holding. The
+    // renderer never sees the transaction itself.
+    var pendingPlanId = null;
+
+    async function sendTransaction() {
+  const addr=document.getElementById('sendAddress').value.trim();
+  const amt=parseFloat(document.getElementById('sendAmount').value);
+  const st=document.getElementById('sendStatus');
+  const btn=document.getElementById('sendBtn');
+  if (!addr||!amt||amt<=0) { st.className='status-msg error'; st.textContent='Enter valid address and amount'; return; }
+  try {
+    const v=await window.gaelium.validateAddress(addr);
+    if (!v.isvalid) { st.className='status-msg error'; st.textContent='Invalid Gaelium address'; return; }
+  } catch(e) { st.className='status-msg error'; st.textContent='Could not validate address'; return; }
+  // Price the payment before showing anything. The dialog opens only once the
+  // daemon has funded the transaction, so the fee on screen is the fee that
+  // will be deducted, not an estimate.
+  btn.disabled=true; btn.textContent='Preparing...';
+  st.className='status-msg'; st.textContent='Preparing transaction...';
+  var plan;
+  try {
+    plan=await window.gaelium.prepareSend(addr,amt);
+  } catch(e) {
+    btn.disabled=false; btn.textContent='Send Transaction';
+    st.className='status-msg error'; st.textContent='Error: '+e.message; return;
+  }
+  btn.disabled=false; btn.textContent='Send Transaction';
+  if (!plan || plan.error) {
+    const errMsg = plan && plan.error ? (plan.error.message||plan.error) : 'Could not prepare the transaction';
+    st.className='status-msg error'; st.textContent='Error: '+errMsg; return;
+  }
+  st.className='status-msg'; st.textContent='';
+  pendingPlanId=plan.planId;
+  document.getElementById('confirmAmount').textContent=plan.amount.toFixed(8) + ' GAEL';
+  document.getElementById('confirmAddress').textContent=plan.address;
+  document.getElementById('confirmFee').textContent=plan.fee.toFixed(8) + ' GAEL';
+  document.getElementById('confirmTotal').textContent=plan.total.toFixed(8) + ' GAEL';
+  const w=document.getElementById('confirmFeeWarning');
+  if (plan.warn) {
+    w.textContent='The network fee is '+plan.warnPercent+' percent of the amount you are sending. Check the amount before confirming.';
+    w.style.display='block';
+  } else {
+    w.textContent=''; w.style.display='none';
+  }
+  document.getElementById('confirmModal').classList.add('active');
+}
+async function fillMaxAmount() {
+  // The largest sendable amount is the whole balance minus the fee of the
+  // transaction that spends it, and that fee depends on how many outputs the
+  // spend consumes. Only the daemon knows, so it is asked rather than guessed.
+  const st=document.getElementById('sendStatus');
+  const btn=document.getElementById('btnFillMaxAmount');
+  const previous=btn?btn.textContent:null;
+  if (btn) { btn.disabled=true; btn.textContent='...'; }
+  try {
+    const r = await window.gaelium.maxAmount();
+    if (!r || r.error) {
+      const errMsg = r && r.error ? (r.error.message||r.error) : 'Could not compute the maximum amount';
+      st.className='status-msg error'; st.textContent='Error: '+errMsg;
+      return;
+    }
+    document.getElementById('sendAmount').value = r.maxAmount.toFixed(8);
+    st.className='status-msg'; st.textContent='';
+  } catch(e) {
+    st.className='status-msg error'; st.textContent='Error: '+e.message;
+  } finally {
+    if (btn) { btn.disabled=false; btn.textContent=previous; }
+  }
+}
+function cancelSend() {
+  document.getElementById('confirmModal').classList.remove('active');
+  // Nothing to undo on the daemon side: pricing a payment reserves no output.
+  pendingPlanId=null;
+}
+async function confirmSend() {
+  document.getElementById('confirmModal').classList.remove('active');
+  const st=document.getElementById('sendStatus');
+  const btn=document.getElementById('sendBtn');
+  const planId=pendingPlanId;
+  pendingPlanId=null;
+  if (!planId) { st.className='status-msg error'; st.textContent='No prepared transaction. Start the payment again.'; return; }
+  btn.disabled=true; btn.textContent='Sending...';
+  try {
+    const tx=await window.gaelium.confirmSend(planId);
+    if (tx.error) { const errMsg = tx.error.message||tx.error; if (String(errMsg).includes('Insufficient') || String(errMsg).includes('Amount exceeds')) { st.className='status-msg error'; st.textContent='Insufficient funds: the balance does not cover this amount plus the network fee. Use Max to fill in the largest amount you can send.'; } else { st.className='status-msg error'; st.textContent='Error: '+errMsg; } }
+    else {
+      st.className='status-msg success'; st.textContent='Sent! TxID: '+tx.substring(0,24)+'...';
+      document.getElementById('sendAddress').value='';
+      document.getElementById('sendAmount').value='';
+      updateDashboard();
+    }
+  } catch(e) { st.className='status-msg error'; st.textContent='Error: '+e.message; }
+  btn.disabled=false; btn.textContent='Send Transaction';
+}
+var txPageSize = 20;
+var txCurrentPage = 0;
+async function loadAllTransactions(page) {
+  if (typeof page === 'number') txCurrentPage = page;
+  var pg = txCurrentPage;
+  try {
+    // Fetch one extra to know if there is a next page
+    const txs = await window.gaelium.listTransactions(txPageSize + 1, pg * txPageSize);
+    if (!txs.error && txs.length > 0) {
+      var hasNext = txs.length > txPageSize;
+      var pageTxs = txs.slice(0, txPageSize);
+      lastTxList = filterChangeTx(pageTxs.reverse().filter(tx => tx.txid !== '9280011d752efed0c25a1d8a3fbd5d9ba50b953cac65f994b9d95437c9be6cfe'));
+      var h = '';
+      lastTxList.forEach(tx => h += buildTxItem(tx));
+      document.getElementById('txListFull').innerHTML = h;
+      renderTxPagination(pg, hasNext);
+    } else if (!txs.error) {
+      document.getElementById('txListFull').innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);font-size:14px;">No transactions found.</div>';
+      document.getElementById('txPagination').style.display = 'none';
+    }
+  } catch(e) {}
+}
+function renderTxPagination(page, hasNext) {
+  var el = document.getElementById('txPagination');
+  if (page === 0 && !hasNext) { el.style.display = 'none'; return; }
+  var h = '';
+  h += '<button class="page-btn" data-page="0"' + (page === 0 ? ' disabled' : '') + '>&laquo;</button>';
+  h += '<button class="page-btn" data-page="' + (page - 1) + '"' + (page === 0 ? ' disabled' : '') + '>&lsaquo; Prev</button>';
+  var start = Math.max(0, page - 2);
+  var end = page + 2;
+  for (var i = start; i <= end; i++) {
+    if (i > page && !hasNext) break;
+    h += '<button class="page-btn' + (i === page ? ' active' : '') + '" data-page="' + i + '">' + (i + 1) + '</button>';
+  }
+  h += '<button class="page-btn" data-page="' + (page + 1) + '"' + (!hasNext ? ' disabled' : '') + '>Next &rsaquo;</button>';
+  h += '<span class="page-info">Page ' + (page + 1) + '</span>';
+  el.innerHTML = h;
+  el.style.display = 'flex';
+}
+// Event delegation for transaction clicks (avoids inline onclick with unsanitized txid)
+document.addEventListener('click', function(e) {
+  const txItem = e.target.closest('.tx-item[data-txid]');
+  if (txItem) { showTxDetail(txItem.dataset.txid); return; }
+  // The explorer button lives inside the modal, which is rebuilt on every open,
+  // so it is reached by the same delegation rather than rewired each time. Only
+  // the id travels to the main process, never an address.
+  const explorerBtn = e.target.closest('[data-explorer-txid]');
+  if (explorerBtn) { openTxOnExplorer(explorerBtn.dataset.explorerTxid); return; }
+  const explorerAddr = e.target.closest('[data-explorer-address]');
+  if (explorerAddr) openAddressOnExplorer(explorerAddr.dataset.explorerAddress);
+});
+// Keyboard equivalent, since the address row is a link rather than a button.
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const explorerAddr = e.target.closest && e.target.closest('[data-explorer-address]');
+  if (!explorerAddr) return;
+  e.preventDefault();
+  openAddressOnExplorer(explorerAddr.dataset.explorerAddress);
+});
+async function openAddressOnExplorer(address) {
+  const s = document.getElementById('txExplorerStatus');
+  try {
+    const r = await window.gaelium.openExplorerAddress(address);
+    if (r && r.error) {
+      if (s) { s.className='status-msg error'; s.textContent='Could not open the explorer: '+r.error; }
+      return;
+    }
+    if (s) s.className='status-msg';
+  } catch (err) {
+    if (s) { s.className='status-msg error'; s.textContent='Could not open the explorer: '+String(err); }
+  }
+}
+async function openTxOnExplorer(txid) {
+  const s = document.getElementById('txExplorerStatus');
+  try {
+    const r = await window.gaelium.openExplorerTx(txid);
+    if (r && r.error) {
+      if (s) { s.className='status-msg error'; s.textContent='Could not open the explorer: '+r.error; }
+      return;
+    }
+    if (s) s.className='status-msg';
+  } catch (err) {
+    if (s) { s.className='status-msg error'; s.textContent='Could not open the explorer: '+String(err); }
+  }
+}
 var MARKET_IDS_MAP = {
   bitcoin: 'btc', ethereum: 'eth', monero: 'xmr',
   dogecoin: 'doge', gaelium: 'gael'
@@ -643,8 +1063,7 @@ if (window.gaelium && window.gaelium.onShutdownStarted) {
   });
 }
 
-scheduleChain();
-scheduleWallet();
+scheduleDashboard();
 updateMarketPrices();
 setInterval(updateMarketPrices, 300000);
 
