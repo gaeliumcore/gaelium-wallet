@@ -569,8 +569,15 @@ ipcMain.handle('rpc-preparesend', async (event, address, amount) => {
 });
 
 ipcMain.handle('rpc-maxamount', async () => {
+  // The largest amount the send path can actually prepare. The send path always
+  // asks fundrawtransaction for a change output, so the maximum has to be the
+  // one that leaves room for that output. Computing it on a spend-all with no
+  // change, as this used to, produced a figure the send path then refused.
+  //
+  // Bounded at four fundrawtransaction calls whatever the size of the wallet,
+  // because coin selection is the expensive part and a wallet can hold
+  // thousands of outputs. Three are used in the normal case.
   try {
-    // Everything the wallet can spend right now.
     const utxos = await rpcCall('listunspent', [0, 9999999]);
     if (!utxos || utxos.length === 0) {
       return { error: 'No funds available' };
@@ -581,29 +588,45 @@ ipcMain.handle('rpc-maxamount', async () => {
     });
     const destAddress = Object.keys(addrBalances).reduce((a, b) => addrBalances[a] > addrBalances[b] ? a : b);
     const totalSats = utxos.reduce((s, u) => s + toSats(u.amount), 0);
+    const allInputs = utxos.map(u => ({ txid: u.txid, vout: u.vout }));
 
-    // Ask the daemon to spend the whole balance and take the fee out of that
-    // same output. What is left in the output is the largest amount that can
-    // actually be sent. lockUnspents is left at its default of false.
-    const rawTx = await rpcCall('createrawtransaction', [[], { [destAddress]: totalSats / 1e8 }]);
-    const funded = await rpcCall('fundrawtransaction', [rawTx, { subtractFeeFromOutputs: [0] }]);
+    // Call one. Fee of a spend of everything with no change output. Only used
+    // to measure what a change output costs, by difference with call two.
+    const rawNoChange = await rpcCall('createrawtransaction', [[], { [destAddress]: totalSats / 1e8 }]);
+    const fundedNoChange = await rpcCall('fundrawtransaction', [rawNoChange, { subtractFeeFromOutputs: [0] }]);
+    const feeNoChange = toSats(fundedNoChange.fee);
 
-    // Read the amount the daemon actually left in the output rather than
-    // assuming it equals the balance minus the fee.
-    const decoded = await rpcCall('decoderawtransaction', [funded.hex]);
-    let maxAmount = null;
-    for (const vout of decoded.vout) {
-      const addrs = (vout.scriptPubKey && vout.scriptPubKey.addresses) || [];
-      if (addrs.indexOf(destAddress) !== -1) {
-        maxAmount = vout.value;
-        break;
-      }
+    // Call two. Fee of the same outputs with a change output added. The inputs
+    // are pinned to every output the wallet holds, because asking for a smaller
+    // amount lets the daemon select fewer inputs and quote a fee that does not
+    // apply to a spend of everything. The probe amount is half the balance,
+    // which is large enough to avoid dust and small enough to leave change. No
+    // output size is assumed anywhere: the difference between the two fees is
+    // what a change output costs on this wallet.
+    const probeSats = Math.floor(totalSats / 2);
+    const rawWithChange = await rpcCall('createrawtransaction', [allInputs, { [destAddress]: probeSats / 1e8 }]);
+    const fundedWithChange = await rpcCall('fundrawtransaction', [rawWithChange, { changeAddress: destAddress }]);
+    const feeWithChange = toSats(fundedWithChange.fee);
+
+    // Call three. The candidate is the balance minus that fee. It is not
+    // returned on trust: the normal send path is run on it, and only a figure
+    // that path accepts is handed back.
+    const candidate = totalSats - feeWithChange;
+    const rawCheck = await rpcCall('createrawtransaction', [[], { [destAddress]: candidate / 1e8 }]);
+    let verified = null;
+    let amountSats = candidate;
+    try {
+      verified = await rpcCall('fundrawtransaction', [rawCheck, { changeAddress: destAddress }]);
+    } catch (e) {
+      // Call four. The estimate was short. Step back by the measured cost of a
+      // change output and check that once more. If that fails too the daemon
+      // error is what the caller gets: no amount is returned unverified.
+      amountSats = candidate - (feeWithChange - feeNoChange);
+      const rawRetry = await rpcCall('createrawtransaction', [[], { [destAddress]: amountSats / 1e8 }]);
+      verified = await rpcCall('fundrawtransaction', [rawRetry, { changeAddress: destAddress }]);
     }
-    if (maxAmount === null) {
-      return { error: 'Could not read the funded output' };
-    }
 
-    return { maxAmount: maxAmount, fee: funded.fee };
+    return { maxAmount: amountSats / 1e8, fee: verified.fee };
   } catch (e) {
     return { error: e.message || String(e) };
   }
