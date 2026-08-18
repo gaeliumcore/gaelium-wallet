@@ -432,22 +432,31 @@ ipcMain.on('window-close', () => mainWindow.close());
 // RPC handlers
 ipcMain.handle('rpc-getbalance', async () => {
   try {
-    const balance = await rpcCall('getbalance');
-    const unconfirmed = await rpcCall('getunconfirmedbalance');
+    // Four calls where there were six, and not because they run together. They
+    // are still sequential on purpose: the daemon serves RPC from a small pool
+    // of threads, so sending more at once during a sync would queue rather than
+    // help. Two of the six were asking for what another call in the same batch
+    // was already about to return. getwalletinfo carries the three balances and
+    // getblockchaininfo carries the difficulty.
+    //
+    // getbalance is the one that mattered. Measured against a chain syncing from
+    // block zero it accounted for every single failure, timing out at the ten
+    // second deadline on a third of the polls, and one failure loses the whole
+    // batch.
     const info = await rpcCall('getblockchaininfo');
     const networkInfo = await rpcCall('getnetworkinfo');
     const miningInfo = await rpcCall('getmininginfo');
     const walletInfo = await rpcCall('getwalletinfo');
 
     return {
-      balance: balance,
-      unconfirmed: unconfirmed,
+      balance: walletInfo.balance,
+      unconfirmed: walletInfo.unconfirmed_balance || 0,
       immature: walletInfo.immature_balance || 0,
       blocks: info.blocks,
       headers: info.headers,
       connections: networkInfo.connections,
       networkhashps: miningInfo.networkhashps,
-      difficulty: miningInfo.difficulty
+      difficulty: info.difficulty
     };
   } catch (e) {
     return { error: e.message || String(e) };
