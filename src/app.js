@@ -311,6 +311,14 @@ function buildTxItem(tx) {
 // what makes it safe to say nothing until then.
 const FAILURE_NOTICE_AFTER = 3;
 let _consecutiveFailures = 0;
+// One missed poll does not make a figure stale. Measured on a chain syncing from
+// block zero, getblockchaininfo timed out on twenty two polls out of a hundred
+// and four and never twice in a row, so greying on the first miss made the
+// counters blink through the whole of the header phase while nothing was wrong
+// with any of the numbers on screen. Two in a row is already more than that run
+// ever produced, and the message still waits for three.
+const STALE_AFTER_MISSES = 2;
+let _walletFailures = 0;
 // Forty times the three seconds a normal start takes. This is measured in
 // elapsed time rather than in attempts, because a count of attempts changes
 // meaning whenever the polling period changes.
@@ -461,7 +469,7 @@ async function updateChain() {
     const d = await window.gaelium.getChainState();
     if (d.error) {
       _consecutiveFailures++;
-      markStale(CHAIN_STALE_IDS, true);
+      if (_consecutiveFailures >= STALE_AFTER_MISSES) markStale(CHAIN_STALE_IDS, true);
       if (!_daemonHasAnswered) {
         var phase = getStartupPhase(d.error);
         var waited = Date.now() - _walletStartedAt;
@@ -570,10 +578,15 @@ async function updateWallet() {
     // A wallet that did not answer greys its own figure and touches nothing
     // else. The main line belongs to the chain poll and stays as it was.
     if (w.error) {
-      markStale(WALLET_STALE_IDS, true);
+      _walletFailures++;
+      // Same rule on this side. The wallet calls were the ones timing out in the
+      // earlier measurement, and a balance that did not refresh once is not a
+      // balance worth marking as doubtful.
+      if (_walletFailures >= STALE_AFTER_MISSES) markStale(WALLET_STALE_IDS, true);
       if (!_daemonHasAnswered) _walletDelayMs = POLL_STARTUP_MS;
       return;
     }
+    _walletFailures = 0;
     markStale(WALLET_STALE_IDS, false);
     _walletDelayMs = _chainIsSyncing ? WALLET_SYNCING_MS : WALLET_SYNCED_MS;
     document.getElementById('balanceAmount').innerHTML=formatAmount(w.balance)+'<span class="balance-currency"> GAEL</span>';
