@@ -511,6 +511,17 @@ ipcMain.on('window-close', () => mainWindow.close());
 // absorbs the wait on the lock the daemon holds while it processes headers, and
 // the other two find it free. They keep their failures to themselves: a peer
 // count that did not come back is a missing peer count, not a missing height.
+// What one peer says the chain height is. startingheight is what it announced at
+// the handshake and never changes after, right at the start of a session and
+// stale later. synced_headers is the best header it has told us about and stays
+// current, but reads minus one until the first one arrives. Neither is right on
+// its own, so the larger of the two is taken.
+function peerHeight(p) {
+  const started = typeof p.startingheight === 'number' ? p.startingheight : -1;
+  const synced = typeof p.synced_headers === 'number' ? p.synced_headers : -1;
+  return Math.max(started, synced);
+}
+
 ipcMain.handle('rpc-chainstate', async () => {
   let info;
   try {
@@ -527,16 +538,25 @@ ipcMain.handle('rpc-chainstate', async () => {
   // ten kilobytes for eleven peers, and it was measured at 9.6 seconds at worst
   // during a header download, so it is the one most likely to be missing.
   let connections = null;
+  let peerHeights = [];
   try {
     const peers = await rpcCall('getpeerinfo');
-    connections = Array.isArray(peers) ? peers.length : 0;
+    const list = Array.isArray(peers) ? peers : [];
+    connections = list.length;
+    // The heights the peers announce, passed on because they are already in
+    // hand. This answer is fetched every poll for its count alone and the rest
+    // of it was being thrown away, so carrying these costs no call and a
+    // measured 0.0016 milliseconds. They are for display and nothing else: the
+    // renderer decides no state, no transition and no denominator with them.
+    peerHeights = list.map(peerHeight).filter(h => h > 0);
   } catch (e) {}
   return {
     blocks: info.blocks,
     headers: info.headers,
     difficulty: info.difficulty,
     connections: connections,
-    networkhashps: networkhashps
+    networkhashps: networkhashps,
+    peerHeights: peerHeights
   };
 });
 

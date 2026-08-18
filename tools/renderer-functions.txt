@@ -1,3 +1,4 @@
+announcedHeight
 applySelectedAddressLabel
 backupWallet
 buildTxItem

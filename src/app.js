@@ -487,6 +487,27 @@ let _chainBusy = false;
 let _walletBusy = false;
 let _walletMisses = 0;
 
+// Display only. It is never used to decide a state, a transition, whether the
+// target has settled, or the denominator of the percentage. Those three rest on
+// getblockchaininfo alone, and that is the whole difference between this and the
+// version that latched onto a peer and sat on Preparing for two hundred seconds.
+//
+// Computed fresh on every poll with no memory of the one before, so an answer
+// that goes missing simply takes the number off the screen and changes nothing
+// else. The median rather than the mode or the maximum: it takes half the peers
+// to move it, and it has no tie break that can go wrong.
+function announcedHeight(heights, localHeaders) {
+  if (!Array.isArray(heights) || heights.length === 0) return 0;
+  var v = heights.filter(function (h) { return typeof h === 'number' && h > 0; })
+                 .sort(function (a, b) { return a - b; });
+  if (!v.length) return 0;
+  var mid = v.length % 2
+    ? v[(v.length - 1) / 2]
+    : Math.floor((v[v.length / 2 - 1] + v[v.length / 2]) / 2);
+  // A target below what we already hold is not a target.
+  return mid >= localHeaders ? mid : 0;
+}
+
 function targetSettled() {
   return _targetSeen > 0 && (Date.now() - _targetChangedAt) >= TARGET_SETTLE_MS;
 }
@@ -585,7 +606,10 @@ function onChainAnswer(c) {
     // takes one for the other.
     if (labelEl) labelEl.textContent = 'Downloading Chain';
     if (blocksEl) blocksEl.textContent = blocks.toLocaleString() + ' blocks verified';
-    if (rewardEl) rewardEl.textContent = _targetSeen.toLocaleString() + ' headers received';
+    var announced = announcedHeight(c.peerHeights, _targetSeen);
+    if (rewardEl) rewardEl.textContent = announced > 0
+      ? _targetSeen.toLocaleString() + ' / ' + announced.toLocaleString() + ' headers received'
+      : _targetSeen.toLocaleString() + ' headers received';
     setLine('syncText', _targetSeen.toLocaleString() + ' headers, ' + blocks.toLocaleString() + ' blocks');
     setLine('bottomBlock', blocks.toLocaleString() + ' / ' + _targetSeen.toLocaleString());
     setLine('balanceAddress', 'Downloading the chain from the network...');
