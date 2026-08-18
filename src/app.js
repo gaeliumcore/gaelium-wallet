@@ -364,82 +364,6 @@ function showStartupNotice(show) {
 // running, whatever a later poll says, so no message may claim it is starting.
 let _daemonHasAnswered = false;
 
-// The height the network says the chain is at. Every peer announces it in its
-// version message, so it is known within seconds of the first connection, long
-// before the local header counter has finished climbing. Using it as the
-// denominator makes the percentage true from the first poll instead of after a
-// minute, and removes the target that used to grow under it in steps of two
-// thousand.
-//
-// verificationprogress cannot serve as a substitute. Gaelium ships chainTxData
-// as three zeroes, which makes GuessVerificationProgress divide nChainTx by
-// itself, so the value is exactly one from the genesis block onward. It was
-// measured at one for the whole of a sync from block zero to block thirty
-// thousand.
-let _syncTarget = 0;
-// Peer heights lag the tip by a block or two while one is being announced.
-const TARGET_TOLERANCE = 4;
-
-// Agreed height, not highest. A single peer that is desynchronised, or lying,
-// must not be able to set the target on its own, so the value the most peers
-// report wins and a tie goes to the higher one.
-function agreedHeight(heights) {
-  const counts = {};
-  heights.forEach(function(h) { counts[h] = (counts[h] || 0) + 1; });
-  let best = 0, bestCount = 0;
-  Object.keys(counts).forEach(function(k) {
-    const h = Number(k), c = counts[k];
-    if (c > bestCount || (c === bestCount && h > best)) { best = h; bestCount = c; }
-  });
-  return best;
-}
-
-function updateSyncTarget(heights, localBlocks) {
-  if (heights && heights.length) {
-    const agreed = agreedHeight(heights);
-    if (agreed > _syncTarget) {
-      _syncTarget = agreed;
-    } else if (agreed > 0 && agreed < _syncTarget && Math.max.apply(null, heights) <= agreed) {
-      // Comes down only when no peer at all still claims the higher figure,
-      // which is what a reorganisation looks like from here. Otherwise the
-      // target never goes backwards.
-      _syncTarget = agreed;
-    }
-  }
-  // Our own chain having passed it is proof the target was too low.
-  if (localBlocks > _syncTarget) _syncTarget = localBlocks;
-  return _syncTarget;
-}
-
-// The counters keep the values of the last poll that succeeded. A failed poll
-// leaves them on screen, so they have to be marked as not current rather than
-// sitting next to a fresh message as though they had just been read.
-const CHAIN_STALE_IDS = ['statBlocks', 'statHash', 'statPeers', 'statDiff', 'bottomBlock', 'bottomPeers', 'bottomHash'];
-const WALLET_STALE_IDS = ['balanceAmount'];
-function markStale(ids, stale) {
-  ids.forEach(function(id) {
-    var el = document.getElementById(id);
-    if (!el) return;
-    el.classList.toggle('stale', stale);
-    if (stale) el.title = 'Last known value. The daemon did not answer the latest poll.';
-    else el.removeAttribute('title');
-  });
-}
-
-function getStartupPhase(errorMsg) {
-  var m = String(errorMsg).toLowerCase();
-  if (m.includes('loading wallet')) return 'Loading wallet...';
-  if (m.includes('loading block')) return 'Loading block index...';
-  if (m.includes('verifying')) return 'Verifying blocks...';
-  if (m.includes('loading') || m.includes('rewinding') || m.includes('rescanning')) return 'Loading...';
-  // A timed out call is not a daemon that failed to start. It is a daemon busy
-  // enough that it did not answer within the deadline, which is what happens
-  // for minutes on end while the block headers come in.
-  if (m.includes('timeout')) return 'Gaelium Core is busy, waiting for it to answer...';
-  // Only reachable before the daemon has ever answered.
-  if (!_daemonHasAnswered) return 'Starting Gaelium Core...';
-  return 'Waiting for Gaelium Core to answer...';
-}
 // setInterval fired every ten seconds whether or not the previous run had
 // finished, so runs could pile up on a daemon that was already too busy to
 // answer. Each of the two polls now carries its own in flight flag, which makes
@@ -511,33 +435,24 @@ async function updateChain() {
     _daemonHasAnswered = true;
     markStale(CHAIN_STALE_IDS, false);
     showStartupNotice(false);
-    var target = updateSyncTarget(d.peerHeights, d.blocks);
-    // Until a peer has answered there is no announced height, so the old header
-    // counter stands in. It lasts a second or two.
-    var haveTarget = target > 0;
-    var denom = haveTarget ? target : d.headers;
-    // No peer has answered and our own chain is empty, so there is nothing to
-    // measure against. Falling through here would divide by a header count of
-    // zero, decide that nothing is left to do, and announce a wallet synced at
-    // block zero, which is the worst thing this screen could say.
-    // The headers are done when they reach the height the peers announced. That
-    // is exact, unlike watching a counter stop moving, and it is the only thing
-    // the peer heights are still needed for. Its one limit: with no peer height
-    // at all, meaning every peer reporting minus one and none carrying a version
-    // height either, the phase never ends and the screen stays on preparing. A
-    // peer that has completed a handshake always carries one, so this is a
-    // degraded state rather than a reachable one, and it clears itself the
-    // moment any peer answers.
-    var headersComplete = haveTarget && d.headers >= _syncTarget - TARGET_TOLERANCE;
-    // Nothing worth counting exists before that point. Blocks sit at zero while
-    // the headers come in, so any figure drawn from them is either a frozen zero
-    // or a second scale disagreeing with the first.
-    var preparing = !headersComplete;
-    // Once the headers are in, the header count is the exact height of the
-    // chain, so it is the denominator. The peer figure was an announcement, this
-    // one is what the daemon holds.
-    denom = headersComplete ? d.headers : 0;
-    var syncing = headersComplete && denom > 0 && (denom - d.blocks) > 2;
+    // The daemon says where it is without being asked twice. While it downloads
+    // headers the block count stays at zero, and the moment it starts validating
+    // it moves. Both figures come from getblockchaininfo, the one call this
+    // screen cannot do without and the one that always ends up answering, so
+    // the phase no longer depends on anything a second call has to supply.
+    //
+    // A wallet that is already up to date has a block count from its first
+    // answer, so it never sees the preparing state at all. That is the intended
+    // behaviour: there is nothing to prepare and nothing to wait for.
+    //
+    // The one second or so at the very start where the count is legitimately
+    // zero is the preparing state, which is exactly what it is for.
+    var preparing = d.blocks === 0;
+    // A daemon holding blocks it has no headers for is not a state this daemon
+    // produces, headers always run ahead. Taking the larger of the two costs
+    // nothing and means the denominator can never be smaller than the numerator.
+    var denom = Math.max(d.headers, d.blocks);
+    var syncing = !preparing && denom > 0 && (denom - d.blocks) > 2;
     // The wallet is asked again the moment this changes, in either direction.
     // Coming out of a sync is when the final balance appears and the note under
     // it has to go, and waiting a full minute for the next wallet poll to notice
