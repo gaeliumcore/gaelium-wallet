@@ -282,6 +282,26 @@ function rpcCall(method, params = []) {
   });
 }
 
+// The window used to be destroyed the instant the close button was pressed, and
+// only then was the daemon asked to stop. That left the application running with
+// nothing on screen for as long as the daemon took to flush its databases, up to
+// the thirty seconds the wait allows. Anyone who read that silence as a freeze
+// and killed the process got exactly the corruption that wait exists to prevent.
+//
+// None of the stopping logic below changes. The order stays RPC stop, then
+// SIGTERM, then SIGKILL after thirty seconds. What changes is that the window
+// stays up and says what is happening until the daemon has gone.
+let windowMayClose = false;
+let shutdownInProgress = false;
+
+function notifyShutdownStarted() {
+  try {
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
+      mainWindow.webContents.send('shutdown-started');
+    }
+  } catch (e) {}
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -297,6 +317,19 @@ function createWindow() {
       sandbox: true,
       preload: path.join(__dirname, 'preload.js')
     }
+  });
+
+  mainWindow.on('close', (e) => {
+    // Set only once stopDaemon has resolved, which is the single way out.
+    if (windowMayClose) return;
+    e.preventDefault();
+    notifyShutdownStarted();
+    if (shutdownInProgress) return;
+    shutdownInProgress = true;
+    stopDaemon().then(() => {
+      windowMayClose = true;
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
+    });
   });
 
   mainWindow.loadFile('src/index.html');
@@ -416,6 +449,9 @@ app.on('window-all-closed', async () => {
 app.on('before-quit', async (event) => {
   if (daemonProcess) {
     event.preventDefault();
+    // Reached when the quit comes from the menu or the system rather than the
+    // close button. The window is still up here, so it can be told too.
+    notifyShutdownStarted();
     await stopDaemon();
     app.quit();
   }

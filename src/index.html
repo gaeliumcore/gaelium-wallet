@@ -323,6 +323,12 @@ body {
 }
 .loading { color: var(--text-muted); font-size: 13px; text-align: center; padding: 40px; }
 
+.shutdown-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(10,15,26,0.94); z-index:2000; justify-content:center; align-items:center; }
+.shutdown-overlay.visible { display:flex; }
+.shutdown-card { max-width:420px; padding:32px; text-align:center; }
+.shutdown-title { font-size:18px; font-weight:600; margin-bottom:12px; color:var(--text-primary); }
+.shutdown-text { font-size:13px; line-height:1.6; color:var(--text-secondary); }
+.shutdown-elapsed { margin-top:16px; font-family:'JetBrains Mono',monospace; font-size:13px; color:var(--green-light); }
 .tx-modal-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:1000; justify-content:center; align-items:center; }
 .tx-modal-overlay.active { display:flex; }
 .tx-modal { background:var(--bg-card); border:1px solid var(--border); border-radius:14px; padding:28px; width:520px; max-height:80vh; overflow-y:auto; }
@@ -652,6 +658,13 @@ body {
 <script src="vendor/qrcode.js"></script>
 <script src="app.js"></script>
 
+<div class="shutdown-overlay" id="shutdownOverlay">
+  <div class="shutdown-card">
+    <div class="shutdown-title">Closing Gaelium Core</div>
+    <div class="shutdown-text">The daemon is writing its databases to disk. This can take up to 30 seconds. Please do not force quit, the wallet closes on its own once the daemon has finished.</div>
+    <div class="shutdown-elapsed"><span id="shutdownElapsed">0</span> s</div>
+  </div>
+</div>
 <div class="tx-modal-overlay" id="txModal">
   <div class="tx-modal">
     <div class="tx-modal-title"><span id="txModalTitle">Transaction Details</span><span id="btnTxModalClose" class="tx-modal-close">✕</span></div>

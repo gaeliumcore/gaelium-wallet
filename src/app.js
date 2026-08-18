@@ -967,6 +967,21 @@ async function updateMarketPrices() {
   } catch (e) {}
 }
 
+// Shown while the main process waits for the daemon to exit. The elapsed count
+// is there so that a wait of twenty seconds reads as a wait rather than a freeze.
+if (window.gaelium && window.gaelium.onShutdownStarted) {
+  window.gaelium.onShutdownStarted(function() {
+    var overlay = document.getElementById('shutdownOverlay');
+    if (!overlay || overlay.classList.contains('visible')) return;
+    overlay.classList.add('visible');
+    var started = Date.now();
+    setInterval(function() {
+      var el = document.getElementById('shutdownElapsed');
+      if (el) el.textContent = Math.floor((Date.now() - started) / 1000);
+    }, 1000);
+  });
+}
+
 scheduleDashboard();
 updateMarketPrices();
 setInterval(updateMarketPrices, 300000);
