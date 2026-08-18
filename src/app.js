@@ -510,7 +510,9 @@ async function updateChain() {
     else _chainDelayMs = headersComplete ? POLL_SYNCING_MS : POLL_HEADERS_MS;
     var blocksEl = document.getElementById('statBlocks');
     var rewardEl = document.getElementById('statReward');
+    var blocksLabelEl = document.getElementById('statBlocksLabel');
     if (connecting) {
+      if (blocksLabelEl) blocksLabelEl.textContent = 'Block Height';
       blocksEl.textContent = d.blocks.toLocaleString();
       rewardEl.textContent = 'Connecting';
       document.getElementById('syncText').textContent = 'Connecting to the network';
@@ -524,18 +526,30 @@ async function updateChain() {
         ? HEADER_PHASE_SHARE + (100 - HEADER_PHASE_SHARE) * (d.blocks / denom)
         : HEADER_PHASE_SHARE * (d.headers / denom);
       pct = Math.min(99.9, Math.max(0, pct)).toFixed(1);
-      var counter = d.blocks.toLocaleString() + ' / ' + denom.toLocaleString();
+      // The tile counts whatever is moving. Blocks do not move at all while the
+      // headers come in, so showing them there left a zero sitting next to a
+      // rising percentage. It shows the header count during that phase and the
+      // block count afterwards, and the label above says which of the two it is
+      // so that headers are never mistaken for verified blocks. The denominator
+      // is the announced height in both phases and does not change.
+      //
+      // The bar underneath stays on the combined percentage throughout, so the
+      // one figure that answers how far along this is never moves backwards.
+      var counting = headersComplete ? d.blocks : d.headers;
+      var counter = counting.toLocaleString() + ' / ' + denom.toLocaleString();
+      if (blocksLabelEl) blocksLabelEl.textContent = headersComplete ? 'Block Height' : 'Block Headers';
       blocksEl.textContent = counter;
       rewardEl.innerHTML = '<div class="sync-progress-bar"><div class="sync-progress-fill" style="width:' + pct + '%"></div></div>';
       document.getElementById('bottomBlock').textContent = counter;
       if (!headersComplete) {
-        document.getElementById('syncText').textContent = 'Headers ' + d.headers.toLocaleString() + ' / ' + denom.toLocaleString();
+        document.getElementById('syncText').textContent = 'Headers ' + counter;
         document.getElementById('balanceAddress').textContent = 'Downloading block headers (' + pct + '%)...';
       } else {
         document.getElementById('syncText').textContent = 'Syncing ' + counter + ' (' + pct + '%)';
         document.getElementById('balanceAddress').textContent = 'Synchronizing with the Gaelium network (' + pct + '%)...';
       }
     } else {
+      if (blocksLabelEl) blocksLabelEl.textContent = 'Block Height';
       blocksEl.textContent = d.blocks.toLocaleString();
       rewardEl.textContent = 'Reward: 1,000 GAEL';
       document.getElementById('syncText').textContent = 'Synced at block ' + d.blocks;
