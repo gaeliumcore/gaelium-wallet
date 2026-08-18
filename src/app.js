@@ -578,6 +578,11 @@ async function exportPrivateKey() {
 
     
     var lastTxList = [];
+    // Same shape the main process enforces. Checked here only to decide whether
+    // to draw the button at all, so that a transaction without a usable id shows
+    // no link rather than a link that leads nowhere. The check that matters is
+    // the one in the main process.
+    const TXID_SHAPE = /^[0-9a-fA-F]{64}$/;
     function showTxDetail(txid) {
       const tx = lastTxList.find(t=>t.txid===txid);
       if(!tx) return;
@@ -596,6 +601,10 @@ async function exportPrivateKey() {
       if(tx.blockhash) rows+='<div class="tx-modal-row"><span class="tx-modal-label">Block Hash</span><span class="tx-modal-value" style="font-size:11px;">'+escapeHtml(tx.blockhash)+'</span></div>';
       if(tx.blockheight) rows+='<div class="tx-modal-row"><span class="tx-modal-label">Block Height</span><span class="tx-modal-value">'+escapeHtml(tx.blockheight)+'</span></div>';
       if(tx.time) rows+='<div class="tx-modal-row"><span class="tx-modal-label">Date</span><span class="tx-modal-value">'+escapeHtml(new Date(tx.time*1000).toLocaleString())+'</span></div>';
+      if(TXID_SHAPE.test(tx.txid||'')) {
+        rows+='<button type="button" class="explorer-btn" data-explorer-txid="'+escapeHtml(tx.txid)+'">View on explorer</button>';
+        rows+='<div class="status-msg" id="txExplorerStatus"></div>';
+      }
       document.getElementById('txModalBody').innerHTML=rows;
       document.getElementById('txModalTitle').textContent=status;
       document.getElementById('txModal').classList.add('active');
@@ -738,8 +747,26 @@ function renderTxPagination(page, hasNext) {
 // Event delegation for transaction clicks (avoids inline onclick with unsanitized txid)
 document.addEventListener('click', function(e) {
   const txItem = e.target.closest('.tx-item[data-txid]');
-  if (txItem) showTxDetail(txItem.dataset.txid);
+  if (txItem) { showTxDetail(txItem.dataset.txid); return; }
+  // The explorer button lives inside the modal, which is rebuilt on every open,
+  // so it is reached by the same delegation rather than rewired each time. Only
+  // the id travels to the main process, never an address.
+  const explorerBtn = e.target.closest('[data-explorer-txid]');
+  if (explorerBtn) openTxOnExplorer(explorerBtn.dataset.explorerTxid);
 });
+async function openTxOnExplorer(txid) {
+  const s = document.getElementById('txExplorerStatus');
+  try {
+    const r = await window.gaelium.openExplorerTx(txid);
+    if (r && r.error) {
+      if (s) { s.className='status-msg error'; s.textContent='Could not open the explorer: '+r.error; }
+      return;
+    }
+    if (s) s.className='status-msg';
+  } catch (err) {
+    if (s) { s.className='status-msg error'; s.textContent='Could not open the explorer: '+String(err); }
+  }
+}
 var MARKET_IDS_MAP = {
   bitcoin: 'btc', ethereum: 'eth', monero: 'xmr',
   dogecoin: 'doge', gaelium: 'gael'

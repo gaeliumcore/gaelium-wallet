@@ -1,4 +1,12 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+
+// The explorer address is built here and nowhere else. shell.openExternal hands
+// a string to the operating system, which will honour schemes that have nothing
+// to do with the web, so the renderer is never allowed to supply a URL. It sends
+// a transaction id, this process checks it against the pattern below, and only
+// then does it build the address from this fixed base.
+const EXPLORER_BASE_URL = 'https://explorer.gaelium.io';
+const TXID_PATTERN = /^[0-9a-fA-F]{64}$/;
 const http = require('http');
 const https = require('https');
 const path = require('path');
@@ -563,6 +571,20 @@ ipcMain.handle('rpc-preparesend', async (event, address, amount) => {
       warn: verdict.warn,
       warnPercent: verdict.warn ? Math.round(verdict.percent) : 0
     };
+  } catch (e) {
+    return { error: e.message || String(e) };
+  }
+});
+
+ipcMain.handle('open-explorer-tx', async (event, txid) => {
+  // Nothing is interpolated before this test passes. A value that is not a
+  // string, or not exactly sixty four hexadecimal characters, opens nothing.
+  if (typeof txid !== 'string' || !TXID_PATTERN.test(txid)) {
+    return { error: 'Invalid transaction id' };
+  }
+  try {
+    await shell.openExternal(EXPLORER_BASE_URL + '/tx/' + txid);
+    return { ok: true };
   } catch (e) {
     return { error: e.message || String(e) };
   }
