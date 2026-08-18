@@ -392,9 +392,26 @@ async function updateDashboard() {
     } else { document.getElementById('txList').innerHTML='<div class="loading">No transactions yet</div>'; }
   } catch(e) { document.getElementById('balanceAddress').textContent='Connecting to daemon...'; }
 }
+// The address the Receive screen is showing. setReceiveAddress is the only
+// writer, which is what keeps the highlighted address and the QR in step.
+let selectedReceiveAddress = null;
+
+// Applies the current selection to whatever rows the history holds right now.
+// Called both when the selection changes and when the list is rebuilt, because
+// the two are loaded in parallel and either one can finish first.
+function markSelectedAddressRow() {
+  const container = document.getElementById('addressHistory');
+  if (!container) return;
+  container.querySelectorAll('[data-copy-addr]').forEach(el => {
+    el.classList.toggle('selected', el.dataset.copyAddr === selectedReceiveAddress);
+  });
+}
+
 // Single path for the receive address: whoever writes the text writes the QR.
 function setReceiveAddress(addr) {
+  selectedReceiveAddress = addr;
   document.getElementById('receiveAddress').textContent = addr;
+  markSelectedAddressRow();
   var img = document.getElementById('receiveQr');
   if (!img) return;
   var url = qrDataUrl(addr, 512);
@@ -417,7 +434,8 @@ async function loadReceiveAddress() {
   } catch(e) {}
 }
 function copyAddress() {
-  navigator.clipboard.writeText(document.getElementById('receiveAddress').textContent);
+  if (!selectedReceiveAddress) return;
+  navigator.clipboard.writeText(selectedReceiveAddress);
   const s=document.getElementById('receiveStatus');
   s.className='status-msg success'; s.textContent='Address copied!';
   setTimeout(()=>s.className='status-msg',3000);
@@ -458,18 +476,22 @@ async function loadAddressHistory() {
       const safeAddr = escapeHtml(addr);
       const sa = addr.length>34 ? addr.substring(0,16)+'...'+addr.substring(addr.length-8) : addr;
       const safeSa = escapeHtml(sa);
-      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;" data-copy-addr="'+safeAddr+'">';
+      html += '<div class="addr-row" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;" data-copy-addr="'+safeAddr+'">';
       html += '<div style="flex:1;min-width:0;"><div style="font-size:13px;">'+labelDisplay+'<span style="font-family:JetBrains Mono,monospace;color:var(--text-secondary);font-size:12px;">'+safeSa+'</span></div>';
       html += '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;"><span class="copy-hint">Click to copy</span></div></div></div>';
     });
     container.innerHTML=html;
     container.querySelectorAll('[data-copy-addr]').forEach(el => {
       el.addEventListener('click', function() {
+        // Selecting redraws the address and the QR together, then the copy
+        // happens exactly as it did before.
+        setReceiveAddress(this.dataset.copyAddr);
         navigator.clipboard.writeText(this.dataset.copyAddr);
         const hint = this.querySelector('span.copy-hint');
         if (hint) { hint.textContent='Copied!'; setTimeout(()=>hint.textContent='Click to copy',2000); }
       });
     });
+    markSelectedAddressRow();
   } catch(e) { console.error('loadAddressHistory error:', e); }
 }
 async function importPrivateKey() {
