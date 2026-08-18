@@ -465,9 +465,14 @@ const TARGET_SETTLE_MS = 12000;
 const TARGET_STEP_TOLERANCE = 16;
 // Neither figure moving for this long is not a sync, whatever else is true.
 const NO_PROGRESS_MS = 90000;
-// Measured: twenty two failures out of a hundred and four polls, every one of
-// them on its own. Three in a row is not something an ordinary sync produces.
-const CHAIN_MISS_LIMIT = 3;
+// Measured on two benches: twenty two failures out of a hundred and four polls,
+// every one of them on its own. Three in a row looked safe on that evidence, and
+// it was not: in the field the daemon sometimes holds its lock long enough to
+// take four header batches at once, twenty four thousand to thirty two thousand
+// between two screens, and three polls in a row miss their deadline. That
+// happened three times in a twenty minute sync. Five keeps the message for a
+// daemon that is genuinely not answering and takes it out of an ordinary sync.
+const CHAIN_MISS_LIMIT = 5;
 const SYNCED_SLACK = 2;
 const WALLET_POLL_SYNCING_MS = 60000;
 const WALLET_POLL_SYNCED_MS = 10000;
@@ -563,7 +568,9 @@ function onChainMiss(message) {
   if (_chainMisses >= 2) markCountersStale(true);
   if (_chainMisses >= CHAIN_MISS_LIMIT && _chainState !== 'STALLED') {
     enterChainState('STALLED');
-    setLine('balanceAddress', 'Gaelium Core has not answered for a while. Still trying.');
+    // The situation is ordinary and clears itself in a few seconds, so the
+    // wording says what is happening rather than that something is wrong.
+    setLine('balanceAddress', 'Busy downloading, this can take a moment...');
   }
 }
 
