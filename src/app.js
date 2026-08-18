@@ -333,6 +333,29 @@ const _walletStartedAt = Date.now();
 // Shown only while the daemon has never answered, and taken down the moment it
 // does. There is no path that leaves it up, because every successful poll hides
 // it whether or not it was ever shown.
+// During the preparing phase the peer count climbs for the first few seconds and
+// then nothing on the screen moves at all for the remaining forty. An elapsed
+// count is the one thing left that is both true and continuous. It claims no
+// progress, it only says the wallet is still there and how long it has been
+// waiting, which is the question someone watching a still screen is asking.
+let _preparingSince = null;
+let _preparingTimer = null;
+function drawPreparing() {
+  var el = document.getElementById('syncText');
+  if (!el || _preparingSince === null) return;
+  el.textContent = 'Preparing, ' + Math.floor((Date.now() - _preparingSince) / 1000) + 's';
+}
+function setPreparing(on) {
+  if (on) {
+    if (_preparingSince === null) _preparingSince = Date.now();
+    drawPreparing();
+    if (_preparingTimer === null) _preparingTimer = setInterval(drawPreparing, 1000);
+    return;
+  }
+  if (_preparingTimer !== null) { clearInterval(_preparingTimer); _preparingTimer = null; }
+  _preparingSince = null;
+}
+
 function showStartupNotice(show) {
   var el = document.getElementById('startupNotice');
   if (el) el.classList.toggle('visible', show);
@@ -535,10 +558,11 @@ async function updateChain() {
       if (blocksLabelEl) blocksLabelEl.textContent = 'Block Height';
       blocksEl.textContent = '--';
       rewardEl.textContent = d.connections === 1 ? '1 peer connected' : d.connections + ' peers connected';
-      document.getElementById('syncText').textContent = 'Preparing';
+      setPreparing(true);
       document.getElementById('bottomBlock').textContent = '--';
       document.getElementById('balanceAddress').textContent = 'Connecting to the network and preparing to synchronize...';
     } else if (syncing) {
+      setPreparing(false);
       // One scale, from zero to one hundred, filled once. The blocks are the
       // only thing being counted and the exact height is the denominator.
       var pct = Math.min(99.9, Math.max(0, (d.blocks / denom) * 100)).toFixed(1);
@@ -550,6 +574,7 @@ async function updateChain() {
       document.getElementById('syncText').textContent = 'Syncing ' + counter + ' (' + pct + '%)';
       document.getElementById('balanceAddress').textContent = 'Synchronizing with the Gaelium network (' + pct + '%)...';
     } else {
+      setPreparing(false);
       if (blocksLabelEl) blocksLabelEl.textContent = 'Block Height';
       blocksEl.textContent = d.blocks.toLocaleString();
       rewardEl.textContent = 'Reward: 1,000 GAEL';
