@@ -314,6 +314,35 @@ let _isPostUpgradeContext = false;
 // running, whatever a later poll says, so no message may claim it is starting.
 let _daemonHasAnswered = false;
 
+// Headers arrive in batches of two thousand, so while they are still coming the
+// denominator grows under the percentage and every figure it produces is wrong.
+// A chain measured from block zero spent eight minutes reading between zero and
+// zero point seven per cent while the headers climbed from two thousand to forty
+// four thousand.
+//
+// The daemon offers no field that says the headers are complete.
+// verificationprogress cannot serve: Gaelium ships chainTxData as three zeroes,
+// which makes GuessVerificationProgress divide nChainTx by itself, so the value
+// is exactly one from the genesis block onward. It was measured at one for the
+// whole of a sync from block zero to block thirty thousand.
+//
+// The criterion used instead is that the header count has stopped climbing in
+// batches for two consecutive polls. A batch is two thousand headers, while a
+// block mined by the network during the sync moves the count by one, so a small
+// tolerance separates the two. Without it a single new block near the end of the
+// sync throws the display back to the header phase, which was observed on a real
+// run at the point where the chain grew from 44300 to 44301.
+//
+// The limits are worth stating. A link slow enough to take longer than two polls
+// between two batches reads as complete and will show a percentage that then
+// jumps backwards. A reorganisation deeper than the tolerance does the same. Both
+// recover on their own, since the display returns to the header phase as soon as
+// the count moves by more than the tolerance again.
+let _lastHeaders = null;
+let _headersStableFor = 0;
+const HEADERS_STABLE_POLLS = 2;
+const HEADERS_BATCH_TOLERANCE = 16;
+
 // The counters keep the values of the last poll that succeeded. A failed poll
 // leaves them on screen, so they have to be marked as not current rather than
 // sitting next to a fresh message as though they had just been read.
@@ -374,10 +403,26 @@ async function updateDashboard() {
     if (d.unconfirmed>0) pp.push('Pending: '+formatAmount(d.unconfirmed)+' GAEL');
     if (d.immature>0) pp.push('Immature: '+formatAmount(d.immature)+' GAEL');
     document.getElementById('balancePending').textContent=pp.join(' | ');
+    var headerDrift = _lastHeaders === null ? Infinity : Math.abs(d.headers - _lastHeaders);
+    _lastHeaders = d.headers;
+    if (headerDrift <= HEADERS_BATCH_TOLERANCE) _headersStableFor++;
+    else _headersStableFor = 0;
+    var headersComplete = _headersStableFor >= HEADERS_STABLE_POLLS;
     var syncing = d.headers > 0 && (d.headers - d.blocks) > 2;
     var blocksEl = document.getElementById('statBlocks');
     var rewardEl = document.getElementById('statReward');
-    if (syncing) {
+    if (syncing && !headersComplete) {
+      // First phase. The target is still moving, so no percentage is shown at
+      // all. The trailing plus sign says the number of headers is not final.
+      var known = d.headers.toLocaleString();
+      blocksEl.textContent = d.blocks.toLocaleString() + ' / ' + known + '+';
+      rewardEl.textContent = 'Downloading headers';
+      document.getElementById('syncText').textContent = 'Headers ' + known;
+      document.getElementById('bottomBlock').textContent = d.blocks.toLocaleString() + ' / ' + known + '+';
+      document.getElementById('balanceAddress').textContent = 'Downloading block headers (' + known + ' so far)...';
+    } else if (syncing) {
+      // Second phase. The target has settled, so the ratio finally means what it
+      // says and the bar can move at a rate that reflects the work left.
       var pct = Math.min(99.9, ((d.blocks / d.headers) * 100)).toFixed(1);
       blocksEl.textContent = d.blocks.toLocaleString() + ' / ' + d.headers.toLocaleString();
       rewardEl.innerHTML = '<div class="sync-progress-bar"><div class="sync-progress-fill" style="width:' + pct + '%"></div></div>';
