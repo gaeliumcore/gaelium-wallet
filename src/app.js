@@ -310,13 +310,37 @@ let _rebuildDetected = false;
 let _rebuildDismissed = false;
 let _initialHeadersChecked = false;
 let _isPostUpgradeContext = false;
+// True from the first answer the daemon ever gives. After that the daemon is
+// running, whatever a later poll says, so no message may claim it is starting.
+let _daemonHasAnswered = false;
+
+// The counters keep the values of the last poll that succeeded. A failed poll
+// leaves them on screen, so they have to be marked as not current rather than
+// sitting next to a fresh message as though they had just been read.
+const STALE_IDS = ['statBlocks', 'statHash', 'statPeers', 'statDiff', 'bottomBlock', 'bottomPeers', 'bottomHash'];
+function markCountersStale(stale) {
+  STALE_IDS.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('stale', stale);
+    if (stale) el.title = 'Last known value. The daemon did not answer the latest poll.';
+    else el.removeAttribute('title');
+  });
+}
+
 function getStartupPhase(errorMsg) {
   var m = String(errorMsg).toLowerCase();
   if (m.includes('loading wallet')) return 'Loading wallet...';
   if (m.includes('loading block')) return 'Loading block index...';
   if (m.includes('verifying')) return 'Verifying blocks...';
   if (m.includes('loading') || m.includes('rewinding') || m.includes('rescanning')) return 'Loading...';
-  return 'Starting Gaelium Core...';
+  // A timed out call is not a daemon that failed to start. It is a daemon busy
+  // enough that it did not answer within the deadline, which is what happens
+  // for minutes on end while the block headers come in.
+  if (m.includes('timeout')) return 'Gaelium Core is busy, waiting for it to answer...';
+  // Only reachable before the daemon has ever answered.
+  if (!_daemonHasAnswered) return 'Starting Gaelium Core...';
+  return 'Waiting for Gaelium Core to answer...';
 }
 async function updateDashboard() {
   try {
@@ -324,6 +348,7 @@ async function updateDashboard() {
     if (d.error) {
       _startupAttempts++;
       var phase = getStartupPhase(d.error);
+      markCountersStale(true);
       document.getElementById('syncText').textContent = phase;
       if (_startupAttempts < 30) {
         document.getElementById('balanceAddress').textContent = phase;
@@ -333,6 +358,8 @@ async function updateDashboard() {
       return;
     }
     _startupAttempts = 0;
+    _daemonHasAnswered = true;
+    markCountersStale(false);
     if (!_initialHeadersChecked) {
       _initialHeadersChecked = true;
       try {
