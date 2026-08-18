@@ -340,6 +340,19 @@ const _walletStartedAt = Date.now();
 // waiting, which is the question someone watching a still screen is asking.
 let _preparingSince = null;
 let _preparingTimer = null;
+// Preparing is the only state that carries no progress of its own, so it is the
+// only one that could sit still without anyone noticing. Past this it gives way
+// to whatever is known, a block count of zero against a header count if that is
+// all there is, rather than staying mute.
+//
+// Three minutes is four times the forty five seconds a header phase took on a
+// real machine, and it only ever fires when the block count has failed to move
+// at all in that time, which the criterion above says cannot happen while the
+// daemon is working. It is a floor under the screen, not a mechanism.
+const PREPARING_CEILING_MS = 180000;
+let _preparingStartedAt = null;
+// Latched, so the screen does not swing back to mute three minutes later.
+let _preparingExpired = false;
 function drawPreparing() {
   var el = document.getElementById('syncText');
   if (!el || _preparingSince === null) return;
@@ -447,7 +460,16 @@ async function updateChain() {
     //
     // The one second or so at the very start where the count is legitimately
     // zero is the preparing state, which is exactly what it is for.
-    var preparing = d.blocks === 0;
+    var preparing = d.blocks === 0 && !_preparingExpired;
+    if (preparing) {
+      if (_preparingStartedAt === null) _preparingStartedAt = Date.now();
+      if (Date.now() - _preparingStartedAt > PREPARING_CEILING_MS) {
+        _preparingExpired = true;
+        preparing = false;
+      }
+    } else {
+      _preparingStartedAt = null;
+    }
     // A daemon holding blocks it has no headers for is not a state this daemon
     // produces, headers always run ahead. Taking the larger of the two costs
     // nothing and means the denominator can never be smaller than the numerator.
