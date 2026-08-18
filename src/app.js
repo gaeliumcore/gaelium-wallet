@@ -617,6 +617,13 @@ async function exportPrivateKey() {
   document.getElementById('confirmAddress').textContent=plan.address;
   document.getElementById('confirmFee').textContent=plan.fee.toFixed(8) + ' GAEL';
   document.getElementById('confirmTotal').textContent=plan.total.toFixed(8) + ' GAEL';
+  const w=document.getElementById('confirmFeeWarning');
+  if (plan.warn) {
+    w.textContent='The network fee is '+plan.warnPercent+' percent of the amount you are sending. Check the amount before confirming.';
+    w.style.display='block';
+  } else {
+    w.textContent=''; w.style.display='none';
+  }
   document.getElementById('confirmModal').classList.add('active');
 }
 async function fillMaxAmount() {

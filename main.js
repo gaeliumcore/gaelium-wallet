@@ -460,6 +460,36 @@ function addAmounts(a, b) {
   return (toSats(a) + toSats(b)) / 1e8;
 }
 
+// Fee guards. On this chain the highest fee actually paid in the twenty most
+// recent non coinbase transactions was 0.11913878 GAEL, for a spend of 77
+// inputs. A fee above one GAEL is roughly eight times that, so no honest
+// payment can reach it and it stops a runaway fee well before it costs
+// anyone a balance.
+const FEE_ABSOLUTE_CAP = 1;
+// Above this share of the amount the payment is flagged, never blocked.
+const FEE_WARNING_PERCENT = 10;
+// Below this fee the share is not worth reporting. A base fee is a large
+// share of a small payment through nobody's fault, and warning on those
+// would teach people to ignore the warning.
+const FEE_WARNING_FLOOR = 0.1;
+
+function feeVerdict(fee, amount) {
+  if (typeof fee !== 'number' || !isFinite(fee) || fee < 0) {
+    return { refused: true, warn: false, percent: 0 };
+  }
+  if (fee > FEE_ABSOLUTE_CAP) {
+    return { refused: true, warn: false, percent: 0 };
+  }
+  if (typeof amount !== 'number' || !isFinite(amount) || amount <= 0) {
+    return { refused: false, warn: false, percent: 0 };
+  }
+  if (fee <= FEE_WARNING_FLOOR) {
+    return { refused: false, warn: false, percent: 0 };
+  }
+  const percent = (fee / amount) * 100;
+  return { refused: false, warn: percent >= FEE_WARNING_PERCENT, percent: percent };
+}
+
 // A spend the daemon has already priced, waiting for the user to confirm it.
 // It stays in the main process: the renderer receives an opaque id and the
 // figures to display, never the transaction hex, so it cannot broadcast
@@ -508,6 +538,12 @@ ipcMain.handle('rpc-preparesend', async (event, address, amount) => {
     // not reserve any output and costs nothing to abandon.
     const funded = await rpcCall('fundrawtransaction', [rawTx, { changeAddress: changeAddress }]);
 
+    const verdict = feeVerdict(funded.fee, amount);
+    if (verdict.refused) {
+      // No plan is stored, so the dialog cannot be reached for this payment.
+      return { error: 'Network fee of ' + funded.fee.toFixed(8) + ' GAEL is abnormally high and the payment was refused. Nothing has been sent.' };
+    }
+
     const planId = require('crypto').randomBytes(16).toString('hex');
     pendingSendPlan = {
       planId: planId,
@@ -523,7 +559,9 @@ ipcMain.handle('rpc-preparesend', async (event, address, amount) => {
       fee: funded.fee,
       amount: amount,
       total: addAmounts(amount, funded.fee),
-      address: address
+      address: address,
+      warn: verdict.warn,
+      warnPercent: verdict.warn ? Math.round(verdict.percent) : 0
     };
   } catch (e) {
     return { error: e.message || String(e) };
