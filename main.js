@@ -491,6 +491,19 @@ ipcMain.on('window-maximize', () => {
 ipcMain.on('window-close', () => mainWindow.close());
 
 // RPC handlers
+// What one peer says the chain height is. startingheight is the height it
+// announced when the connection was made and never changes afterwards, so it is
+// right at the start of a session and stale later. synced_headers is the best
+// header that peer has told us about and stays current, but it reads minus one
+// until the first header arrives. Neither is right on its own. Measured on a
+// long running node, startingheight ranged from 633 to 44082 while the chain was
+// at 44340 and synced_headers read 44340 on ten peers out of eleven.
+function peerHeight(p) {
+  const started = typeof p.startingheight === 'number' ? p.startingheight : -1;
+  const synced = typeof p.synced_headers === 'number' ? p.synced_headers : -1;
+  return Math.max(started, synced);
+}
+
 ipcMain.handle('rpc-getbalance', async () => {
   try {
     // Four calls where there were six, and not because they run together. They
@@ -505,19 +518,26 @@ ipcMain.handle('rpc-getbalance', async () => {
     // second deadline on a third of the polls, and one failure loses the whole
     // batch.
     const info = await rpcCall('getblockchaininfo');
-    const networkInfo = await rpcCall('getnetworkinfo');
+    const peers = await rpcCall('getpeerinfo');
     const miningInfo = await rpcCall('getmininginfo');
     const walletInfo = await rpcCall('getwalletinfo');
 
+    // getpeerinfo also gives the connection count, so getnetworkinfo is no
+    // longer asked for. It costs 2.2 milliseconds against 0.8, which buys the
+    // one thing the wallet was missing: what the network says the chain height
+    // is, known from the first handshake instead of guessed at from a header
+    // counter that climbs for a minute.
+    const peerList = Array.isArray(peers) ? peers : [];
     return {
       balance: walletInfo.balance,
       unconfirmed: walletInfo.unconfirmed_balance || 0,
       immature: walletInfo.immature_balance || 0,
       blocks: info.blocks,
       headers: info.headers,
-      connections: networkInfo.connections,
+      connections: peerList.length,
       networkhashps: miningInfo.networkhashps,
-      difficulty: info.difficulty
+      difficulty: info.difficulty,
+      peerHeights: peerList.map(peerHeight).filter(h => h > 0)
     };
   } catch (e) {
     return { error: e.message || String(e) };

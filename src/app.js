@@ -333,34 +333,59 @@ function showStartupNotice(show) {
 // running, whatever a later poll says, so no message may claim it is starting.
 let _daemonHasAnswered = false;
 
-// Headers arrive in batches of two thousand, so while they are still coming the
-// denominator grows under the percentage and every figure it produces is wrong.
-// A chain measured from block zero spent eight minutes reading between zero and
-// zero point seven per cent while the headers climbed from two thousand to forty
-// four thousand.
+// The height the network says the chain is at. Every peer announces it in its
+// version message, so it is known within seconds of the first connection, long
+// before the local header counter has finished climbing. Using it as the
+// denominator makes the percentage true from the first poll instead of after a
+// minute, and removes the target that used to grow under it in steps of two
+// thousand.
 //
-// The daemon offers no field that says the headers are complete.
-// verificationprogress cannot serve: Gaelium ships chainTxData as three zeroes,
-// which makes GuessVerificationProgress divide nChainTx by itself, so the value
-// is exactly one from the genesis block onward. It was measured at one for the
-// whole of a sync from block zero to block thirty thousand.
-//
-// The criterion used instead is that the header count has stopped climbing in
-// batches for two consecutive polls. A batch is two thousand headers, while a
-// block mined by the network during the sync moves the count by one, so a small
-// tolerance separates the two. Without it a single new block near the end of the
-// sync throws the display back to the header phase, which was observed on a real
-// run at the point where the chain grew from 44300 to 44301.
-//
-// The limits are worth stating. A link slow enough to take longer than two polls
-// between two batches reads as complete and will show a percentage that then
-// jumps backwards. A reorganisation deeper than the tolerance does the same. Both
-// recover on their own, since the display returns to the header phase as soon as
-// the count moves by more than the tolerance again.
-let _lastHeaders = null;
-let _headersStableFor = 0;
-const HEADERS_STABLE_POLLS = 2;
-const HEADERS_BATCH_TOLERANCE = 16;
+// verificationprogress cannot serve as a substitute. Gaelium ships chainTxData
+// as three zeroes, which makes GuessVerificationProgress divide nChainTx by
+// itself, so the value is exactly one from the genesis block onward. It was
+// measured at one for the whole of a sync from block zero to block thirty
+// thousand.
+let _syncTarget = 0;
+// Peer heights lag the tip by a block or two while one is being announced.
+const TARGET_TOLERANCE = 4;
+// Share of the progress figure the header phase is worth. Headers take about
+// forty five seconds and blocks about twenty minutes on the same machine, so
+// headers are a few per cent of the wait. Giving them five keeps the figure
+// moving during those seconds without overstating what they buy, and it means
+// one number that only ever goes up, rather than a bar that fills during the
+// headers and empties again when the blocks start.
+const HEADER_PHASE_SHARE = 5;
+
+// Agreed height, not highest. A single peer that is desynchronised, or lying,
+// must not be able to set the target on its own, so the value the most peers
+// report wins and a tie goes to the higher one.
+function agreedHeight(heights) {
+  const counts = {};
+  heights.forEach(function(h) { counts[h] = (counts[h] || 0) + 1; });
+  let best = 0, bestCount = 0;
+  Object.keys(counts).forEach(function(k) {
+    const h = Number(k), c = counts[k];
+    if (c > bestCount || (c === bestCount && h > best)) { best = h; bestCount = c; }
+  });
+  return best;
+}
+
+function updateSyncTarget(heights, localBlocks) {
+  if (heights && heights.length) {
+    const agreed = agreedHeight(heights);
+    if (agreed > _syncTarget) {
+      _syncTarget = agreed;
+    } else if (agreed > 0 && agreed < _syncTarget && Math.max.apply(null, heights) <= agreed) {
+      // Comes down only when no peer at all still claims the higher figure,
+      // which is what a reorganisation looks like from here. Otherwise the
+      // target never goes backwards.
+      _syncTarget = agreed;
+    }
+  }
+  // Our own chain having passed it is proof the target was too low.
+  if (localBlocks > _syncTarget) _syncTarget = localBlocks;
+  return _syncTarget;
+}
 
 // The counters keep the values of the last poll that succeeded. A failed poll
 // leaves them on screen, so they have to be marked as not current rather than
@@ -454,12 +479,13 @@ async function updateDashboard() {
     _daemonHasAnswered = true;
     markCountersStale(false);
     showStartupNotice(false);
-    var headerDrift = _lastHeaders === null ? Infinity : Math.abs(d.headers - _lastHeaders);
-    _lastHeaders = d.headers;
-    if (headerDrift <= HEADERS_BATCH_TOLERANCE) _headersStableFor++;
-    else _headersStableFor = 0;
-    var headersComplete = _headersStableFor >= HEADERS_STABLE_POLLS;
-    var syncing = d.headers > 0 && (d.headers - d.blocks) > 2;
+    var target = updateSyncTarget(d.peerHeights, d.blocks);
+    // Until a peer has answered there is no announced height, so the old header
+    // counter stands in. It lasts a second or two.
+    var haveTarget = target > 0;
+    var denom = haveTarget ? target : d.headers;
+    var syncing = denom > 0 && (denom - d.blocks) > 2;
+    var headersComplete = d.headers >= denom - TARGET_TOLERANCE;
     if (!syncing) _pollDelayMs = POLL_SYNCED_MS;
     else _pollDelayMs = headersComplete ? POLL_SYNCING_MS : POLL_HEADERS_MS;
     document.getElementById('balanceAmount').innerHTML=formatAmount(d.balance)+'<span class="balance-currency"> GAEL</span>';
@@ -473,24 +499,25 @@ async function updateDashboard() {
     document.getElementById('balancePending').textContent=pp.join(' | ');
     var blocksEl = document.getElementById('statBlocks');
     var rewardEl = document.getElementById('statReward');
-    if (syncing && !headersComplete) {
-      // First phase. The target is still moving, so no percentage is shown at
-      // all. The trailing plus sign says the number of headers is not final.
-      var known = d.headers.toLocaleString();
-      blocksEl.textContent = d.blocks.toLocaleString() + ' / ' + known + '+';
-      rewardEl.textContent = 'Downloading headers';
-      document.getElementById('syncText').textContent = 'Headers ' + known;
-      document.getElementById('bottomBlock').textContent = d.blocks.toLocaleString() + ' / ' + known + '+';
-      document.getElementById('balanceAddress').textContent = 'Downloading block headers (' + known + ' so far)...';
-    } else if (syncing) {
-      // Second phase. The target has settled, so the ratio finally means what it
-      // says and the bar can move at a rate that reflects the work left.
-      var pct = Math.min(99.9, ((d.blocks / d.headers) * 100)).toFixed(1);
-      blocksEl.textContent = d.blocks.toLocaleString() + ' / ' + d.headers.toLocaleString();
+    if (syncing) {
+      // One figure across both phases, so it only ever goes up. The headers are
+      // worth the first few per cent and the blocks the rest. The wording says
+      // which phase it is in, the number says how far along the whole thing is.
+      var pct = headersComplete
+        ? HEADER_PHASE_SHARE + (100 - HEADER_PHASE_SHARE) * (d.blocks / denom)
+        : HEADER_PHASE_SHARE * (d.headers / denom);
+      pct = Math.min(99.9, Math.max(0, pct)).toFixed(1);
+      var counter = d.blocks.toLocaleString() + ' / ' + denom.toLocaleString();
+      blocksEl.textContent = counter;
       rewardEl.innerHTML = '<div class="sync-progress-bar"><div class="sync-progress-fill" style="width:' + pct + '%"></div></div>';
-      document.getElementById('syncText').textContent = 'Syncing ' + d.blocks.toLocaleString() + ' / ' + d.headers.toLocaleString() + ' (' + pct + '%)';
-      document.getElementById('bottomBlock').textContent = d.blocks.toLocaleString() + ' / ' + d.headers.toLocaleString();
-      document.getElementById('balanceAddress').textContent = 'Synchronizing with the Gaelium network (' + pct + '%)...';
+      document.getElementById('bottomBlock').textContent = counter;
+      if (!headersComplete) {
+        document.getElementById('syncText').textContent = 'Headers ' + d.headers.toLocaleString() + ' / ' + denom.toLocaleString();
+        document.getElementById('balanceAddress').textContent = 'Downloading block headers (' + pct + '%)...';
+      } else {
+        document.getElementById('syncText').textContent = 'Syncing ' + counter + ' (' + pct + '%)';
+        document.getElementById('balanceAddress').textContent = 'Synchronizing with the Gaelium network (' + pct + '%)...';
+      }
     } else {
       blocksEl.textContent = d.blocks.toLocaleString();
       rewardEl.textContent = 'Reward: 1,000 GAEL';
