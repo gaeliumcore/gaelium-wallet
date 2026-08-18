@@ -294,6 +294,18 @@ function rpcCall(method, params = []) {
 let windowMayClose = false;
 let shutdownInProgress = false;
 
+// Five seconds past the thirty second ceiling stopDaemon works to. That ceiling
+// resolves inside its own timer callback, so the normal path always finishes
+// first and this bound never ends the wait in practice. It exists because the
+// window must not depend on that staying true. A rejected promise left the
+// window with no way to close and the application with no way to quit except
+// being killed, which is the exact outcome this whole path exists to prevent.
+//
+// It closes the window and does nothing else. It sends no signal, so the daemon
+// keeps every bit of the time stopDaemon gave it, and window-all-closed still
+// waits on stopDaemon before the application quits.
+const SHUTDOWN_WINDOW_CEILING_MS = 35000;
+
 function notifyShutdownStarted() {
   try {
     if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
@@ -320,16 +332,29 @@ function createWindow() {
   });
 
   mainWindow.on('close', (e) => {
-    // Set only once stopDaemon has resolved, which is the single way out.
+    // Set only once the wait is over, which is the single way out.
     if (windowMayClose) return;
     e.preventDefault();
     notifyShutdownStarted();
+    // A second press while the first is still running falls out here, so it
+    // cannot start a second stop or a second timer.
     if (shutdownInProgress) return;
     shutdownInProgress = true;
-    stopDaemon().then(() => {
+
+    let ceiling = null;
+    let closed = false;
+    const closeWindow = () => {
+      if (closed) return;
+      closed = true;
+      if (ceiling) clearTimeout(ceiling);
       windowMayClose = true;
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
-    });
+    };
+    ceiling = setTimeout(closeWindow, SHUTDOWN_WINDOW_CEILING_MS);
+    // Both settlements close the window. A stop that failed is still a stop that
+    // is over as far as the window is concerned, and leaving the rejection
+    // unhandled was what kept the window open.
+    stopDaemon().then(closeWindow, closeWindow);
   });
 
   mainWindow.loadFile('src/index.html');
