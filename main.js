@@ -47,17 +47,37 @@ function getConfPath() {
 // keeps whatever name that config carries, so it can still reach a daemon that
 // an earlier version started, both right now and at every later launch. Only a
 // machine with no config at all ever sees a generated name.
+function generateRpcUser() {
+  return 'gaelrpc_' + require('crypto').randomBytes(12).toString('hex');
+}
+function generateRpcPassword() {
+  return 'gaelwallet_' + require('crypto').randomBytes(16).toString('hex');
+}
+
+// Both reads require the start of a line. Without that anchor a commented out
+// line such as #rpcpassword=old was picked up as though it were live, and the
+// wallet then authenticated with a value the daemon had never seen.
+const RPCUSER_VALUE = /^rpcuser=(.+)$/m;
+const RPCPASSWORD_VALUE = /^rpcpassword=(.+)$/m;
+// Presence of the key at all, empty value included. Used to decide whether a
+// line has to be added, so that a line reading rpcuser= with nothing after it
+// is left alone rather than joined by a second one. Config parsing keeps the
+// first occurrence of a key, so adding a duplicate would not take effect and
+// would leave the file harder to read than it was.
+const RPCUSER_KEY = /^rpcuser=/m;
+const RPCPASSWORD_KEY = /^rpcpassword=/m;
+
 function getRpcUser() {
   const confPath = getConfPath();
   if (fs.existsSync(confPath)) {
     const conf = fs.readFileSync(confPath, 'utf8');
-    const match = conf.match(/^rpcuser=(.+)$/m);
+    const match = conf.match(RPCUSER_VALUE);
     if (match) return match[1].trim();
-    // A config with no user line is left as it is. Answering with the name this
-    // wallet has always assumed keeps that case exactly as it was.
+    // A config with no usable user line is left as it is. Answering with the
+    // name this wallet has always assumed keeps that case exactly as it was.
     return DEFAULT_RPC_USER;
   }
-  return 'gaelrpc_' + require('crypto').randomBytes(12).toString('hex');
+  return generateRpcUser();
 }
 
 // Read existing password from config or generate once
@@ -65,10 +85,38 @@ function getRpcPassword() {
   const confPath = getConfPath();
   if (fs.existsSync(confPath)) {
     const conf = fs.readFileSync(confPath, 'utf8');
-    const match = conf.match(/rpcpassword=(.+)/);
+    const match = conf.match(RPCPASSWORD_VALUE);
     if (match) return match[1].trim();
   }
-  return 'gaelwallet_' + require('crypto').randomBytes(16).toString('hex');
+  return generateRpcPassword();
+}
+
+// Add a credential line that a config is missing. The wallet and the daemon read
+// the same file, so a config carrying only one of the two leaves them unable to
+// agree on what to use, and the wallet generated a value the daemon never saw.
+//
+// Only missing lines are added, at the end. Everything already in the file is
+// carried over as one untouched string, so existing lines, comments, blank lines
+// and ordering survive exactly as they were. The write goes to a neighbouring
+// file and is renamed onto the target, so an interruption leaves the previous
+// config rather than a truncated one.
+function repairConfCredentials() {
+  const confPath = getConfPath();
+  if (!fs.existsSync(confPath)) return;
+  const conf = fs.readFileSync(confPath, 'utf8');
+  const additions = [];
+  if (!RPCUSER_KEY.test(conf)) additions.push('rpcuser=' + generateRpcUser());
+  if (!RPCPASSWORD_KEY.test(conf)) additions.push('rpcpassword=' + generateRpcPassword());
+  if (additions.length === 0) return;
+  // Match the line endings the file already uses, so a config written on
+  // Windows does not end up with a mixture.
+  const eol = conf.indexOf('\r\n') !== -1 ? '\r\n' : '\n';
+  // A file that does not end with a line break would otherwise have its last
+  // line run into the first addition.
+  const joiner = (conf.length === 0 || conf.endsWith('\n')) ? '' : eol;
+  const tmpPath = confPath + '.tmp';
+  fs.writeFileSync(tmpPath, conf + joiner + additions.join(eol) + eol);
+  fs.renameSync(tmpPath, confPath);
 }
 let RPC_PASS = null;
 
@@ -112,6 +160,10 @@ addnode=seed3.gaelium.io
 `;
     fs.writeFileSync(confPath, config);
   } else {
+    // Repaired before the values are read, so the wallet picks up whatever was
+    // just added, and before the daemon is started a few lines further on, so
+    // the daemon reads the same file in the same state.
+    repairConfCredentials();
     RPC_USER = getRpcUser();
     RPC_PASS = getRpcPassword();
   }
