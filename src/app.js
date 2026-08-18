@@ -305,7 +305,16 @@ function buildTxItem(tx) {
   let safeConf = escapeHtml(tx.confirmations||0);
   return '<div class="tx-item" style="cursor:pointer" data-txid="'+safeTxid+'"><div class="tx-icon-wrap '+escapeHtml(tc)+'">'+icon+'</div><div class="tx-details"><div class="tx-type">'+safeTl+'</div><div class="tx-address">'+safeSa+'</div></div><div class="tx-right"><div class="tx-amount '+(tx.amount<0?'negative':'positive')+'">'+safeAmt+' GAEL</div><div class="tx-date">'+safeDate+'</div><span class="tx-conf">'+safeConf+' conf.</span></div></div>';
 }
-let _startupAttempts = 0;
+// Measured on a sync from block zero: twenty two polls out of seventy eight
+// failed, and not one of them followed another. The longest run was one. Three
+// in a row is therefore something an ordinary sync does not produce, which is
+// what makes it safe to say nothing until then.
+const FAILURE_NOTICE_AFTER = 3;
+let _consecutiveFailures = 0;
+// Forty times the three seconds a normal start takes. This is measured in
+// elapsed time rather than in attempts, because a count of attempts changes
+// meaning whenever the polling period changes.
+const UNREACHABLE_AFTER_MS = 120000;
 // A start takes about three seconds on a fresh datadir, measured from the daemon
 // log. Twenty seconds is more than six times that, late enough that a normal
 // start never reaches it and early enough to answer someone wondering whether
@@ -403,21 +412,27 @@ async function updateDashboard() {
   try {
     const d = await window.gaelium.getBalance();
     if (d.error) {
-      _startupAttempts++;
-      var phase = getStartupPhase(d.error);
+      _consecutiveFailures++;
       markCountersStale(true);
-      if (!_daemonHasAnswered && (Date.now() - _walletStartedAt) > SLOW_START_NOTICE_MS) {
-        showStartupNotice(true);
+      if (!_daemonHasAnswered) {
+        // Before the first answer the phase text is the only sign of life there
+        // is, so it goes on screen every time.
+        var phase = getStartupPhase(d.error);
+        var waited = Date.now() - _walletStartedAt;
+        if (waited > SLOW_START_NOTICE_MS) showStartupNotice(true);
+        document.getElementById('syncText').textContent = phase;
+        document.getElementById('balanceAddress').textContent = waited > UNREACHABLE_AFTER_MS
+          ? 'Unable to connect to Gaelium daemon. Please restart the wallet or check your firewall settings.'
+          : phase;
+      } else if (_consecutiveFailures >= FAILURE_NOTICE_AFTER) {
+        document.getElementById('balanceAddress').textContent = 'Still waiting for Gaelium Core to answer...';
       }
-      document.getElementById('syncText').textContent = phase;
-      if (_startupAttempts < 30) {
-        document.getElementById('balanceAddress').textContent = phase;
-      } else {
-        document.getElementById('balanceAddress').textContent = 'Unable to connect to Gaelium daemon. Please restart the wallet or check your firewall settings.';
-      }
+      // A missed poll on its own changes nothing else. The main text goes on
+      // saying what the last answer said and the greyed counters carry the rest,
+      // because one poll that did not come back is plumbing, not news.
       return;
     }
-    _startupAttempts = 0;
+    _consecutiveFailures = 0;
     _daemonHasAnswered = true;
     markCountersStale(false);
     showStartupNotice(false);
