@@ -657,7 +657,7 @@ async function confirmSend() {
   btn.disabled=true; btn.textContent='Sending...';
   try {
     const tx=await window.gaelium.confirmSend(planId);
-    if (tx.error) { const errMsg = tx.error.message||tx.error; if (String(errMsg).includes('Insufficient') || String(errMsg).includes('Amount exceeds')) { st.className='status-msg error'; st.textContent='Insufficient funds. Remember to account for the network fee (~0.003 GAEL).'; } else { st.className='status-msg error'; st.textContent='Error: '+errMsg; } }
+    if (tx.error) { const errMsg = tx.error.message||tx.error; if (String(errMsg).includes('Insufficient') || String(errMsg).includes('Amount exceeds')) { st.className='status-msg error'; st.textContent='Insufficient funds: the balance does not cover this amount plus the network fee. Use Max to fill in the largest amount you can send.'; } else { st.className='status-msg error'; st.textContent='Error: '+errMsg; } }
     else {
       st.className='status-msg success'; st.textContent='Sent! TxID: '+tx.substring(0,24)+'...';
       document.getElementById('sendAddress').value='';
