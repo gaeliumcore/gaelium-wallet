@@ -411,6 +411,13 @@ const POLL_SYNCING_MS = 30000;
 // daemon being ready. At ten seconds a start that took three could leave the
 // screen empty for seven more.
 const POLL_STARTUP_MS = 1500;
+// Period while the headers are still arriving. Thirty seconds there left the
+// screen without a single moving figure for half a minute, on the phase a new
+// user watches hardest and which lasts under a minute in total, so it read as a
+// freeze. The four calls that remain never took more than 3.4 milliseconds
+// across the whole measured run, the worst of the header phase included, so
+// asking every five seconds there costs nothing worth counting.
+const POLL_HEADERS_MS = 5000;
 // Starts fast and stays fast until the first answer arrives.
 let _pollDelayMs = POLL_STARTUP_MS;
 
@@ -447,18 +454,23 @@ async function updateDashboard() {
     _daemonHasAnswered = true;
     markCountersStale(false);
     showStartupNotice(false);
-    document.getElementById('balanceAmount').innerHTML=formatAmount(d.balance)+'<span class="balance-currency"> GAEL</span>';
-    let pp=[];
-    if (d.unconfirmed>0) pp.push('Pending: '+formatAmount(d.unconfirmed)+' GAEL');
-    if (d.immature>0) pp.push('Immature: '+formatAmount(d.immature)+' GAEL');
-    document.getElementById('balancePending').textContent=pp.join(' | ');
     var headerDrift = _lastHeaders === null ? Infinity : Math.abs(d.headers - _lastHeaders);
     _lastHeaders = d.headers;
     if (headerDrift <= HEADERS_BATCH_TOLERANCE) _headersStableFor++;
     else _headersStableFor = 0;
     var headersComplete = _headersStableFor >= HEADERS_STABLE_POLLS;
     var syncing = d.headers > 0 && (d.headers - d.blocks) > 2;
-    _pollDelayMs = syncing ? POLL_SYNCING_MS : POLL_SYNCED_MS;
+    if (!syncing) _pollDelayMs = POLL_SYNCED_MS;
+    else _pollDelayMs = headersComplete ? POLL_SYNCING_MS : POLL_HEADERS_MS;
+    document.getElementById('balanceAmount').innerHTML=formatAmount(d.balance)+'<span class="balance-currency"> GAEL</span>';
+    let pp=[];
+    if (d.unconfirmed>0) pp.push('Pending: '+formatAmount(d.unconfirmed)+' GAEL');
+    if (d.immature>0) pp.push('Immature: '+formatAmount(d.immature)+' GAEL');
+    // A wallet restored from a backup or from an imported key reads zero for the
+    // whole of the sync, which is correct and alarming at the same time. Said
+    // here rather than in a banner, next to the figure it is about.
+    if (syncing) pp.push('Not final until the sync completes');
+    document.getElementById('balancePending').textContent=pp.join(' | ');
     var blocksEl = document.getElementById('statBlocks');
     var rewardEl = document.getElementById('statReward');
     if (syncing && !headersComplete) {
