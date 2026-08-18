@@ -557,7 +557,8 @@ async function updateChain() {
       // tiles fill in beside it.
       if (blocksLabelEl) blocksLabelEl.textContent = 'Block Height';
       blocksEl.textContent = '--';
-      rewardEl.textContent = d.connections === 1 ? '1 peer connected' : d.connections + ' peers connected';
+      rewardEl.textContent = d.connections === null ? 'Connecting'
+        : (d.connections === 1 ? '1 peer connected' : d.connections + ' peers connected');
       setPreparing(true);
       document.getElementById('bottomBlock').textContent = '--';
       document.getElementById('balanceAddress').textContent = 'Connecting to the network and preparing to synchronize...';
@@ -582,11 +583,17 @@ async function updateChain() {
       document.getElementById('bottomBlock').textContent = d.blocks;
       document.getElementById('balanceAddress').textContent = 'Connected to the Gaelium Core Network (GAEL)';
     }
-    document.getElementById('statHash').textContent=formatHash(d.networkhashps);
-    document.getElementById('statPeers').textContent=d.connections;
+    // A call that did not answer leaves its own tile alone rather than writing
+    // a null over a figure that was right a moment ago.
+    if (d.networkhashps !== null && d.networkhashps !== undefined) {
+      document.getElementById('statHash').textContent=formatHash(d.networkhashps);
+      document.getElementById('bottomHash').textContent=formatHash(d.networkhashps);
+    }
+    if (d.connections !== null && d.connections !== undefined) {
+      document.getElementById('statPeers').textContent=d.connections;
+      document.getElementById('bottomPeers').textContent=d.connections;
+    }
     document.getElementById('statDiff').textContent='Diff: '+parseFloat(d.difficulty).toFixed(4);
-    document.getElementById('bottomPeers').textContent=d.connections;
-    document.getElementById('bottomHash').textContent=formatHash(d.networkhashps);
     if (syncStateChanged) updateWallet();
   } catch(e) {
     markStale(CHAIN_STALE_IDS, true);

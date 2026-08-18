@@ -491,19 +491,6 @@ ipcMain.on('window-maximize', () => {
 ipcMain.on('window-close', () => mainWindow.close());
 
 // RPC handlers
-// What one peer says the chain height is. startingheight is the height it
-// announced when the connection was made and never changes afterwards, so it is
-// right at the start of a session and stale later. synced_headers is the best
-// header that peer has told us about and stays current, but it reads minus one
-// until the first header arrives. Neither is right on its own. Measured on a
-// long running node, startingheight ranged from 633 to 44082 while the chain was
-// at 44340 and synced_headers read 44340 on ten peers out of eleven.
-function peerHeight(p) {
-  const started = typeof p.startingheight === 'number' ? p.startingheight : -1;
-  const synced = typeof p.synced_headers === 'number' ? p.synced_headers : -1;
-  return Math.max(started, synced);
-}
-
 // Two questions, asked apart, because one of them is slow and the other is not.
 //
 // Measured across seventy eight polls of a chain syncing from block zero, the
@@ -512,23 +499,45 @@ function peerHeight(p) {
 // so a slow wallet blanked the block height, the peer count and the hash rate
 // as well, and greyed the whole screen. The chain answers on its own now, and
 // the wallet cannot drag it down.
+//
+// Within the chain question the same mistake was repeated one level down. One
+// try surrounded all three calls, so whichever of them missed its deadline threw
+// away the answers the other two had already given. In the field that was
+// getpeerinfo: it timed out, the block height went with it, and the screen sat
+// on preparing while the daemon was validating blocks.
+//
+// getblockchaininfo is the only call this screen cannot do without, so it is the
+// only one whose failure loses the answer. It also goes first, which means it
+// absorbs the wait on the lock the daemon holds while it processes headers, and
+// the other two find it free. They keep their failures to themselves: a peer
+// count that did not come back is a missing peer count, not a missing height.
 ipcMain.handle('rpc-chainstate', async () => {
+  let info;
   try {
-    const info = await rpcCall('getblockchaininfo');
-    const peers = await rpcCall('getpeerinfo');
-    const miningInfo = await rpcCall('getmininginfo');
-    const peerList = Array.isArray(peers) ? peers : [];
-    return {
-      blocks: info.blocks,
-      headers: info.headers,
-      difficulty: info.difficulty,
-      connections: peerList.length,
-      networkhashps: miningInfo.networkhashps,
-      peerHeights: peerList.map(peerHeight).filter(h => h > 0)
-    };
+    info = await rpcCall('getblockchaininfo');
   } catch (e) {
     return { error: e.message || String(e) };
   }
+  let networkhashps = null;
+  try {
+    const miningInfo = await rpcCall('getmininginfo');
+    networkhashps = miningInfo.networkhashps;
+  } catch (e) {}
+  // Asked last and wanted only for its count. It is the heaviest of the three,
+  // ten kilobytes for eleven peers, and it was measured at 9.6 seconds at worst
+  // during a header download, so it is the one most likely to be missing.
+  let connections = null;
+  try {
+    const peers = await rpcCall('getpeerinfo');
+    connections = Array.isArray(peers) ? peers.length : 0;
+  } catch (e) {}
+  return {
+    blocks: info.blocks,
+    headers: info.headers,
+    difficulty: info.difficulty,
+    connections: connections,
+    networkhashps: networkhashps
+  };
 });
 
 ipcMain.handle('rpc-walletstate', async () => {
