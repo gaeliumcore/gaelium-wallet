@@ -481,8 +481,6 @@ let _targetChangedAt = Date.now();
 // When either figure last moved, whatever the state.
 let _lastProgressAt = Date.now();
 let _lastBlocks = -1;
-// Highest percentage already shown. Never show less than this.
-let _shownPct = 0;
 let _chainBusy = false;
 let _walletBusy = false;
 let _walletMisses = 0;
@@ -586,14 +584,18 @@ function onChainAnswer(c) {
   if (blocks !== _lastBlocks) { _lastBlocks = blocks; _lastProgressAt = Date.now(); }
 
   var behind = _targetSeen - blocks;
-  enterChainState(behind > SYNCED_SLACK ? 'SYNCING' : 'SYNCED');
+  // A chain with no headers at all is not a chain that has caught up. On a fresh
+  // datadir the first answer is zero blocks against zero headers, and calling
+  // that synced announced a wallet connected and up to date at block zero, one
+  // poll after launch, and set the progress figure to a hundred where it stayed.
+  var caughtUp = _targetSeen > 0 && behind <= SYNCED_SLACK;
+  enterChainState(caughtUp ? 'SYNCED' : 'SYNCING');
 
   var blocksEl = document.getElementById('statBlocks');
   var rewardEl = document.getElementById('statReward');
   var labelEl = document.getElementById('statBlocksLabel');
 
   if (_chainState === 'SYNCED') {
-    _shownPct = 100;
     if (labelEl) labelEl.textContent = 'Block Height';
     if (blocksEl) blocksEl.textContent = blocks.toLocaleString();
     if (rewardEl) rewardEl.textContent = 'Reward: 1,000 GAEL';
@@ -614,10 +616,14 @@ function onChainAnswer(c) {
     setLine('bottomBlock', blocks.toLocaleString() + ' / ' + _targetSeen.toLocaleString());
     setLine('balanceAddress', 'Downloading the chain from the network...');
   } else {
+    // Blocks verified against the height they are heading for, and nothing else.
+    // There was a clamp here that kept the figure from ever falling. It made
+    // sense while two scales shared one bar; with one scale it protects against
+    // nothing and can only hold a wrong number on screen, which is exactly what
+    // it did. Accuracy wins over smoothness: a figure that steps back once is
+    // better than a figure that reads a hundred for twenty minutes.
     var raw = _targetSeen > 0 ? (blocks / _targetSeen) * 100 : 0;
-    // Clamped so it can never fall, whatever the target does afterwards.
-    _shownPct = Math.max(_shownPct, Math.min(99.9, Math.max(0, raw)));
-    var pct = _shownPct.toFixed(1);
+    var pct = Math.min(99.9, Math.max(0, raw)).toFixed(1);
     var counter = blocks.toLocaleString() + ' / ' + _targetSeen.toLocaleString();
     if (labelEl) labelEl.textContent = 'Block Height';
     if (blocksEl) blocksEl.textContent = counter;
