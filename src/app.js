@@ -306,10 +306,20 @@ function buildTxItem(tx) {
   return '<div class="tx-item" style="cursor:pointer" data-txid="'+safeTxid+'"><div class="tx-icon-wrap '+escapeHtml(tc)+'">'+icon+'</div><div class="tx-details"><div class="tx-type">'+safeTl+'</div><div class="tx-address">'+safeSa+'</div></div><div class="tx-right"><div class="tx-amount '+(tx.amount<0?'negative':'positive')+'">'+safeAmt+' GAEL</div><div class="tx-date">'+safeDate+'</div><span class="tx-conf">'+safeConf+' conf.</span></div></div>';
 }
 let _startupAttempts = 0;
-let _rebuildDetected = false;
-let _rebuildDismissed = false;
-let _initialHeadersChecked = false;
-let _isPostUpgradeContext = false;
+// A start takes about three seconds on a fresh datadir, measured from the daemon
+// log. Twenty seconds is more than six times that, late enough that a normal
+// start never reaches it and early enough to answer someone wondering whether
+// anything is happening at all.
+const SLOW_START_NOTICE_MS = 20000;
+const _walletStartedAt = Date.now();
+
+// Shown only while the daemon has never answered, and taken down the moment it
+// does. There is no path that leaves it up, because every successful poll hides
+// it whether or not it was ever shown.
+function showStartupNotice(show) {
+  var el = document.getElementById('startupNotice');
+  if (el) el.classList.toggle('visible', show);
+}
 // True from the first answer the daemon ever gives. After that the daemon is
 // running, whatever a later poll says, so no message may claim it is starting.
 let _daemonHasAnswered = false;
@@ -396,6 +406,9 @@ async function updateDashboard() {
       _startupAttempts++;
       var phase = getStartupPhase(d.error);
       markCountersStale(true);
+      if (!_daemonHasAnswered && (Date.now() - _walletStartedAt) > SLOW_START_NOTICE_MS) {
+        showStartupNotice(true);
+      }
       document.getElementById('syncText').textContent = phase;
       if (_startupAttempts < 30) {
         document.getElementById('balanceAddress').textContent = phase;
@@ -407,15 +420,7 @@ async function updateDashboard() {
     _startupAttempts = 0;
     _daemonHasAnswered = true;
     markCountersStale(false);
-    if (!_initialHeadersChecked) {
-      _initialHeadersChecked = true;
-      try {
-        var wi = await window.gaelium.getWalletInfo();
-        if (wi && typeof wi.keypoololdest === 'number') {
-          _isPostUpgradeContext = (Math.floor(Date.now() / 1000) - wi.keypoololdest) > 60;
-        }
-      } catch(e) {}
-    }
+    showStartupNotice(false);
     document.getElementById('balanceAmount').innerHTML=formatAmount(d.balance)+'<span class="balance-currency"> GAEL</span>';
     let pp=[];
     if (d.unconfirmed>0) pp.push('Pending: '+formatAmount(d.unconfirmed)+' GAEL');
@@ -455,22 +460,6 @@ async function updateDashboard() {
       document.getElementById('bottomBlock').textContent = d.blocks;
       document.getElementById('balanceAddress').textContent = 'Connected to the Gaelium Core Network (GAEL)';
     }
-    // Rebuild post-upgrade detection: blocks starting from 0 but headers already at tip
-    var rebuildBanner = document.getElementById('rebuildBanner');
-    if (!_rebuildDismissed && _isPostUpgradeContext) {
-      if (d.headers > 1000 && d.blocks < (d.headers - 5)) {
-        if (_rebuildDetected || d.blocks < 100) {
-          _rebuildDetected = true;
-          rebuildBanner.classList.add('visible');
-          var rbPct = Math.min(99, ((d.blocks / d.headers) * 100)).toFixed(1);
-          document.getElementById('rebuildProgress').style.width = rbPct + '%';
-        }
-      } else if (_rebuildDetected) {
-        _rebuildDismissed = true;
-        rebuildBanner.classList.remove('visible');
-      }
-    }
-
     document.getElementById('statHash').textContent=formatHash(d.networkhashps);
     document.getElementById('statPeers').textContent=d.connections;
     document.getElementById('statDiff').textContent='Diff: '+parseFloat(d.difficulty).toFixed(4);
