@@ -359,34 +359,6 @@ const HEADER_PHASE_SHARE = 5;
 // Agreed height, not highest. A single peer that is desynchronised, or lying,
 // must not be able to set the target on its own, so the value the most peers
 // report wins and a tie goes to the higher one.
-function agreedHeight(heights) {
-  const counts = {};
-  heights.forEach(function(h) { counts[h] = (counts[h] || 0) + 1; });
-  let best = 0, bestCount = 0;
-  Object.keys(counts).forEach(function(k) {
-    const h = Number(k), c = counts[k];
-    if (c > bestCount || (c === bestCount && h > best)) { best = h; bestCount = c; }
-  });
-  return best;
-}
-
-function updateSyncTarget(heights, localBlocks) {
-  if (heights && heights.length) {
-    const agreed = agreedHeight(heights);
-    if (agreed > _syncTarget) {
-      _syncTarget = agreed;
-    } else if (agreed > 0 && agreed < _syncTarget && Math.max.apply(null, heights) <= agreed) {
-      // Comes down only when no peer at all still claims the higher figure,
-      // which is what a reorganisation looks like from here. Otherwise the
-      // target never goes backwards.
-      _syncTarget = agreed;
-    }
-  }
-  // Our own chain having passed it is proof the target was too low.
-  if (localBlocks > _syncTarget) _syncTarget = localBlocks;
-  return _syncTarget;
-}
-
 // The counters keep the values of the last poll that succeeded. A failed poll
 // leaves them on screen, so they have to be marked as not current rather than
 // sitting next to a fresh message as though they had just been read.
@@ -446,132 +418,294 @@ const POLL_HEADERS_MS = 5000;
 // Starts fast and stays fast until the first answer arrives.
 let _pollDelayMs = POLL_STARTUP_MS;
 
-async function updateDashboard() {
-  if (_dashboardInFlight) return;
-  _dashboardInFlight = true;
+// ---------------------------------------------------------------------------
+// Sync display.
+//
+// One state, held in one variable, rather than five booleans that could
+// contradict each other. Everything on the screen is a function of it.
+//
+//   STARTING     no chain answer yet
+//   SYNCING      answered, and behind
+//   SYNCED       answered, and up to date
+//   STALLED      answered once, then stopped
+//   UNREACHABLE  never answered at all
+//
+// The design deliberately does not try to detect the end of the header download.
+// Nothing the daemon publishes says when that happens: verificationprogress is
+// stuck at one on this chain, the peer heights come from a call that can fail,
+// and a block count of zero is only true on a fast machine, measured at sixteen
+// blocks by the fifth poll on a slower one. Instead the denominator is watched
+// for stability, and every way of being wrong about it is made harmless.
+const CHAIN_POLL_MS = {
+  STARTING: 1500,
+  // While the target is still moving. Both of the first two calls in the batch
+  // wait during this phase, measured at ten and nine point six seconds at worst,
+  // so the loop rearms five seconds after the previous run settles, not five
+  // seconds after it started.
+  SYNCING_UNSETTLED: 5000,
+  // While it is not. Every call is under two milliseconds here, and the figure
+  // moves two or three points between two polls, which is plainly visible.
+  SYNCING_SETTLED: 15000,
+  SYNCED: 10000,
+  STALLED: 5000,
+  UNREACHABLE: 5000
+};
+// The header count changes every few seconds while it downloads and only when a
+// block is mined afterwards, once or twice a minute. Twelve seconds sits inside
+// that gap. A slow link pausing longer than this between two batches makes the
+// target look settled early, which is why the shown percentage is clamped: the
+// worst case is a figure that pauses, never one that goes backwards.
+const TARGET_SETTLE_MS = 12000;
+// A header batch moves the count by two thousand. A block mined by the network
+// during the sync moves it by one. Only the first kind counts as the target
+// still arriving, otherwise every new block near the end of a sync throws the
+// display back to the absolute figures for twelve seconds. That flapping was
+// seen on the replay of a real run, at the point where the chain grew from
+// 44300 to 44301.
+const TARGET_STEP_TOLERANCE = 16;
+// Neither figure moving for this long is not a sync, whatever else is true.
+const NO_PROGRESS_MS = 90000;
+// Measured: twenty two failures out of a hundred and four polls, every one of
+// them on its own. Three in a row is not something an ordinary sync produces.
+const CHAIN_MISS_LIMIT = 3;
+const SYNCED_SLACK = 2;
+const WALLET_POLL_SYNCING_MS = 60000;
+const WALLET_POLL_SYNCED_MS = 10000;
+
+let _chainState = 'STARTING';
+let _chainStateSince = Date.now();
+let _chainMisses = 0;
+// Grows only. A denominator that can shrink is a percentage that can jump.
+let _targetSeen = 0;
+let _targetChangedAt = Date.now();
+// When either figure last moved, whatever the state.
+let _lastProgressAt = Date.now();
+let _lastBlocks = -1;
+// Highest percentage already shown. Never show less than this.
+let _shownPct = 0;
+let _chainBusy = false;
+let _walletBusy = false;
+let _walletMisses = 0;
+
+function targetSettled() {
+  return _targetSeen > 0 && (Date.now() - _targetChangedAt) >= TARGET_SETTLE_MS;
+}
+function enterChainState(next) {
+  if (_chainState === next) return;
+  _chainState = next;
+  _chainStateSince = Date.now();
+}
+function secondsSince(t) { return Math.floor((Date.now() - t) / 1000); }
+function setLine(id, text) {
+  var el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
+// The only thing that moves while the wallet is waiting. It claims no progress,
+// it says how long the wait has been, which is the question a still screen asks.
+// One timer for the whole file, and it writes only in the states that need it.
+function paintWaiting() {
+  if (_chainState === 'STARTING') {
+    if (secondsSince(_chainStateSince) * 1000 > SLOW_START_NOTICE_MS) {
+      showStartupNotice(true);
+      setLine('syncText', 'Starting, ' + secondsSince(_chainStateSince) + 's');
+    }
+    return;
+  }
+  if (_chainState === 'UNREACHABLE') {
+    setLine('syncText', 'No answer, ' + secondsSince(_chainStateSince) + 's');
+    return;
+  }
+  if (_chainState === 'STALLED') {
+    setLine('syncText', 'No answer, ' + secondsSince(_chainStateSince) + 's');
+    return;
+  }
+  if (_chainState === 'SYNCING' && (Date.now() - _lastProgressAt) > NO_PROGRESS_MS) {
+    setLine('syncText', 'No progress, ' + secondsSince(_lastProgressAt) + 's');
+  }
+}
+
+function onChainMiss(message) {
+  _chainMisses++;
+  if (_chainState === 'STARTING') {
+    // The daemon refuses calls for about three seconds while it loads, and says
+    // which step it is on. That message is the most useful thing there is here.
+    setLine('syncText', getStartupPhase(message));
+    setLine('balanceAddress', getStartupPhase(message));
+    if (Date.now() - _chainStateSince > UNREACHABLE_AFTER_MS) {
+      enterChainState('UNREACHABLE');
+      setLine('balanceAddress', 'Unable to connect to Gaelium daemon. Please restart the wallet or check your firewall settings.');
+    }
+    return;
+  }
+  if (_chainState === 'UNREACHABLE') return;
+  // Two misses in a row before the figures are called doubtful, three before
+  // anything is said. One miss changes nothing at all.
+  if (_chainMisses >= 2) markCountersStale(true);
+  if (_chainMisses >= CHAIN_MISS_LIMIT && _chainState !== 'STALLED') {
+    enterChainState('STALLED');
+    setLine('balanceAddress', 'Gaelium Core has not answered for a while. Still trying.');
+  }
+}
+
+function onChainAnswer(c) {
+  _chainMisses = 0;
+  _daemonHasAnswered = true;
+  markCountersStale(false);
+  showStartupNotice(false);
+
+  var blocks = typeof c.blocks === 'number' ? c.blocks : 0;
+  var headers = typeof c.headers === 'number' ? c.headers : 0;
+  if (headers > _targetSeen) {
+    var jump = headers - _targetSeen;
+    _targetSeen = headers;
+    if (jump > TARGET_STEP_TOLERANCE) _targetChangedAt = Date.now();
+    _lastProgressAt = Date.now();
+  }
+  if (blocks !== _lastBlocks) { _lastBlocks = blocks; _lastProgressAt = Date.now(); }
+
+  var behind = _targetSeen - blocks;
+  enterChainState(behind > SYNCED_SLACK ? 'SYNCING' : 'SYNCED');
+
+  var blocksEl = document.getElementById('statBlocks');
+  var rewardEl = document.getElementById('statReward');
+  var labelEl = document.getElementById('statBlocksLabel');
+
+  if (_chainState === 'SYNCED') {
+    _shownPct = 100;
+    if (labelEl) labelEl.textContent = 'Block Height';
+    if (blocksEl) blocksEl.textContent = blocks.toLocaleString();
+    if (rewardEl) rewardEl.textContent = 'Reward: 1,000 GAEL';
+    setLine('syncText', 'Synced at block ' + blocks);
+    setLine('bottomBlock', String(blocks));
+    setLine('balanceAddress', 'Connected to the Gaelium Core Network (GAEL)');
+  } else if (!targetSettled()) {
+    // The target is still climbing, so no fraction of it can mean anything. Two
+    // absolute figures instead, both true and both rising, named so that nobody
+    // takes one for the other.
+    if (labelEl) labelEl.textContent = 'Downloading Chain';
+    if (blocksEl) blocksEl.textContent = blocks.toLocaleString() + ' blocks verified';
+    if (rewardEl) rewardEl.textContent = _targetSeen.toLocaleString() + ' headers received';
+    setLine('syncText', _targetSeen.toLocaleString() + ' headers, ' + blocks.toLocaleString() + ' blocks');
+    setLine('bottomBlock', blocks.toLocaleString() + ' / ' + _targetSeen.toLocaleString());
+    setLine('balanceAddress', 'Downloading the chain from the network...');
+  } else {
+    var raw = _targetSeen > 0 ? (blocks / _targetSeen) * 100 : 0;
+    // Clamped so it can never fall, whatever the target does afterwards.
+    _shownPct = Math.max(_shownPct, Math.min(99.9, Math.max(0, raw)));
+    var pct = _shownPct.toFixed(1);
+    var counter = blocks.toLocaleString() + ' / ' + _targetSeen.toLocaleString();
+    if (labelEl) labelEl.textContent = 'Block Height';
+    if (blocksEl) blocksEl.textContent = counter;
+    if (rewardEl) rewardEl.innerHTML = '<div class="sync-progress-bar"><div class="sync-progress-fill" style="width:' + pct + '%"></div></div>';
+    setLine('syncText', 'Syncing ' + counter + ' (' + pct + '%)');
+    setLine('bottomBlock', counter);
+    setLine('balanceAddress', 'Synchronizing with the Gaelium network (' + pct + '%)...');
+  }
+
+  // A call that did not answer leaves its own tile alone rather than writing a
+  // null over a figure that was right a moment ago.
+  if (typeof c.networkhashps === 'number') {
+    setLine('statHash', formatHash(c.networkhashps));
+    setLine('bottomHash', formatHash(c.networkhashps));
+  }
+  if (typeof c.connections === 'number') {
+    setLine('statPeers', String(c.connections));
+    setLine('bottomPeers', String(c.connections));
+  }
+  if (typeof c.difficulty === 'number') {
+    setLine('statDiff', 'Diff: ' + parseFloat(c.difficulty).toFixed(4));
+  }
+}
+
+async function pollChain() {
+  if (_chainBusy) return;
+  _chainBusy = true;
+  var wasSyncing = _chainState === 'SYNCING';
   try {
-    // getBalance was split in two on the main side, one call for the chain and
-    // one for the wallet, so that a slow wallet could not blank the chain
-    // figures. Both are asked here and recomposed into the single object this
-    // function has always consumed, and a failure on either side is reported the
-    // way getBalance reported one, so nothing below this line changes.
     const c = await window.gaelium.getChainState();
-    const w = c.error ? null : await window.gaelium.getWalletState();
-    const d = c.error ? { error: c.error } : (w.error ? { error: w.error } : {
-      balance: w.balance,
-      unconfirmed: w.unconfirmed,
-      immature: w.immature,
-      blocks: c.blocks,
-      headers: c.headers,
-      connections: c.connections,
-      networkhashps: c.networkhashps,
-      difficulty: c.difficulty,
-      // The chain call no longer carries the heights the peers announce. Without
-      // them the target below stays unset and the denominator falls back to the
-      // header count, which is what this screen showed before those heights
-      // existed. Its known defect, a denominator that climbs in batches of two
-      // thousand, comes back with it.
-      peerHeights: []
-    });
-    if (d.error) {
-      _consecutiveFailures++;
-      markCountersStale(true);
-      if (!_daemonHasAnswered) {
-        // Before the first answer the phase text is the only sign of life there
-        // is, so it goes on screen every time.
-        var phase = getStartupPhase(d.error);
-        var waited = Date.now() - _walletStartedAt;
-        if (waited > SLOW_START_NOTICE_MS) showStartupNotice(true);
-        document.getElementById('syncText').textContent = phase;
-        document.getElementById('balanceAddress').textContent = waited > UNREACHABLE_AFTER_MS
-          ? 'Unable to connect to Gaelium daemon. Please restart the wallet or check your firewall settings.'
-          : phase;
-      } else if (_consecutiveFailures >= FAILURE_NOTICE_AFTER) {
-        document.getElementById('balanceAddress').textContent = 'Still waiting for Gaelium Core to answer...';
-      }
-      // Keep asking quickly until there has been a first answer. The slower
-      // period is for a daemon that is running, not for one still starting.
-      if (!_daemonHasAnswered) _pollDelayMs = POLL_STARTUP_MS;
-      // A missed poll on its own changes nothing else. The main text goes on
-      // saying what the last answer said and the greyed counters carry the rest,
-      // because one poll that did not come back is plumbing, not news.
-      return;
-    }
-    _consecutiveFailures = 0;
-    _daemonHasAnswered = true;
-    markCountersStale(false);
-    showStartupNotice(false);
-    // Passed a zero rather than the local block count, because letting our own
-    // chain raise the target with no peer heights to check it against makes the
-    // target equal the block count, the difference zero, and the screen announce
-    // a wallet synced at whatever block it happens to be validating. Sooner a
-    // moving denominator than a false statement.
-    var target = updateSyncTarget(d.peerHeights, 0);
-    // Until a peer has answered there is no announced height, so the old header
-    // counter stands in. It lasts a second or two.
-    var haveTarget = target > 0;
-    var denom = haveTarget ? target : d.headers;
-    var syncing = denom > 0 && (denom - d.blocks) > 2;
-    var headersComplete = d.headers >= denom - TARGET_TOLERANCE;
-    if (!syncing) _pollDelayMs = POLL_SYNCED_MS;
-    else _pollDelayMs = headersComplete ? POLL_SYNCING_MS : POLL_HEADERS_MS;
-    document.getElementById('balanceAmount').innerHTML=formatAmount(d.balance)+'<span class="balance-currency"> GAEL</span>';
-    let pp=[];
-    if (d.unconfirmed>0) pp.push('Pending: '+formatAmount(d.unconfirmed)+' GAEL');
-    if (d.immature>0) pp.push('Immature: '+formatAmount(d.immature)+' GAEL');
-    // A wallet restored from a backup or from an imported key reads zero for the
-    // whole of the sync, which is correct and alarming at the same time. Said
-    // here rather than in a banner, next to the figure it is about.
-    if (syncing) pp.push('Not final until the sync completes');
-    document.getElementById('balancePending').textContent=pp.join(' | ');
-    var blocksEl = document.getElementById('statBlocks');
-    var rewardEl = document.getElementById('statReward');
-    if (syncing) {
-      // One figure across both phases, so it only ever goes up. The headers are
-      // worth the first few per cent and the blocks the rest. The wording says
-      // which phase it is in, the number says how far along the whole thing is.
-      var pct = headersComplete
-        ? HEADER_PHASE_SHARE + (100 - HEADER_PHASE_SHARE) * (d.blocks / denom)
-        : HEADER_PHASE_SHARE * (d.headers / denom);
-      pct = Math.min(99.9, Math.max(0, pct)).toFixed(1);
-      var counter = d.blocks.toLocaleString() + ' / ' + denom.toLocaleString();
-      blocksEl.textContent = counter;
-      rewardEl.innerHTML = '<div class="sync-progress-bar"><div class="sync-progress-fill" style="width:' + pct + '%"></div></div>';
-      document.getElementById('bottomBlock').textContent = counter;
-      if (!headersComplete) {
-        document.getElementById('syncText').textContent = 'Headers ' + d.headers.toLocaleString() + ' / ' + denom.toLocaleString();
-        document.getElementById('balanceAddress').textContent = 'Downloading block headers (' + pct + '%)...';
-      } else {
-        document.getElementById('syncText').textContent = 'Syncing ' + counter + ' (' + pct + '%)';
-        document.getElementById('balanceAddress').textContent = 'Synchronizing with the Gaelium network (' + pct + '%)...';
-      }
-    } else {
-      blocksEl.textContent = d.blocks.toLocaleString();
-      rewardEl.textContent = 'Reward: 1,000 GAEL';
-      document.getElementById('syncText').textContent = 'Synced \u2014 Block ' + d.blocks;
-      document.getElementById('bottomBlock').textContent = d.blocks;
-      document.getElementById('balanceAddress').textContent = 'Connected to the Gaelium Core Network (GAEL)';
-    }
-    document.getElementById('statHash').textContent=formatHash(d.networkhashps);
-    document.getElementById('statPeers').textContent=d.connections;
-    document.getElementById('statDiff').textContent='Diff: '+parseFloat(d.difficulty).toFixed(4);
-    document.getElementById('bottomPeers').textContent=d.connections;
-    document.getElementById('bottomHash').textContent=formatHash(d.networkhashps);
+    if (c && c.error) onChainMiss(c.error);
+    else if (c) onChainAnswer(c);
+    else onChainMiss('empty answer');
+  } catch (e) {
+    onChainMiss(e && e.message ? e.message : String(e));
+  } finally {
+    _chainBusy = false;
+  }
+  // Coming out of a sync is when the final balance appears and the note under it
+  // has to go, and the wallet is on a one minute period while syncing.
+  if (wasSyncing && _chainState === 'SYNCED') pollWallet();
+}
+
+async function pollWallet() {
+  if (_walletBusy) return;
+  _walletBusy = true;
+  try {
+    const w = await window.gaelium.getWalletState();
+    if (!w || w.error) { _walletMisses++; return; }
+    _walletMisses = 0;
+    document.getElementById('balanceAmount').innerHTML = formatAmount(w.balance) + '<span class="balance-currency"> GAEL</span>';
+    let pp = [];
+    if (w.unconfirmed > 0) pp.push('Pending: ' + formatAmount(w.unconfirmed) + ' GAEL');
+    if (w.immature > 0) pp.push('Immature: ' + formatAmount(w.immature) + ' GAEL');
+    // A wallet restored from a backup reads zero for the whole of the sync,
+    // which is correct and alarming at the same time.
+    if (_chainState === 'SYNCING' || _chainState === 'STARTING') pp.push('Not final until the sync completes');
+    setLine('balancePending', pp.join(' | '));
     const txs = await window.gaelium.listTransactions(30);
-    if (!txs.error && txs.length>0) {
-      lastTxList=filterChangeTx(txs.reverse().filter(tx=>tx.txid!=='9280011d752efed0c25a1d8a3fbd5d9ba50b953cac65f994b9d95437c9be6cfe')); let h=''; lastTxList.slice(0,8).forEach(tx => h+=buildTxItem(tx));
-      document.getElementById('txList').innerHTML=h;
-    } else { document.getElementById('txList').innerHTML='<div class="loading">No transactions yet</div>'; }
-  } catch(e) { document.getElementById('balanceAddress').textContent='Connecting to daemon...'; }
-  finally { _dashboardInFlight = false; }
+    if (!txs.error && txs.length > 0) {
+      lastTxList = filterChangeTx(txs.reverse().filter(tx => tx.txid !== '9280011d752efed0c25a1d8a3fbd5d9ba50b953cac65f994b9d95437c9be6cfe'));
+      let h = '';
+      lastTxList.slice(0, 8).forEach(tx => h += buildTxItem(tx));
+      document.getElementById('txList').innerHTML = h;
+    } else if (!txs.error) {
+      document.getElementById('txList').innerHTML = '<div class="loading">No transactions yet</div>';
+    }
+  } catch (e) {
+    _walletMisses++;
+  } finally {
+    _walletBusy = false;
+  }
+}
+
+// Kept for the places that refresh after an action and want both at once.
+async function updateDashboard() {
+  await pollChain();
+  await pollWallet();
 }
 
 // Schedules the next run only once the current one has settled, so the gap
 // between two runs is a real gap and never an overlap.
+// One loop for both polls, and the reason it is written this way is the bug that
+// blanked the screen tonight. The previous version was a then with no catch, so
+// a single exception anywhere in the body left nothing to rearm the timer and
+// the wallet sat on its opening text until it was closed. Here the catch comes
+// before the then, and the call itself is wrapped, so the next run is armed
+// whatever happens, including a synchronous throw.
+function loop(run, delay) {
+  const tick = () => {
+    let p;
+    try { p = run(); } catch (e) { p = Promise.reject(e); }
+    Promise.resolve(p).catch(() => {}).then(() => { setTimeout(tick, delay()); });
+  };
+  tick();
+}
+
+function chainDelay() {
+  if (_chainState === 'SYNCING') {
+    return targetSettled() ? CHAIN_POLL_MS.SYNCING_SETTLED : CHAIN_POLL_MS.SYNCING_UNSETTLED;
+  }
+  return CHAIN_POLL_MS[_chainState] || CHAIN_POLL_MS.SYNCED;
+}
+function walletDelay() {
+  if (_chainState === 'STARTING') return CHAIN_POLL_MS.STARTING;
+  return _chainState === 'SYNCED' ? WALLET_POLL_SYNCED_MS : WALLET_POLL_SYNCING_MS;
+}
+
 function scheduleDashboard() {
-  updateDashboard().then(function() {
-    setTimeout(scheduleDashboard, _pollDelayMs);
-  });
+  loop(pollChain, chainDelay);
+  loop(pollWallet, walletDelay);
+  setInterval(paintWaiting, 1000);
 }
 // The address the Receive screen is showing. setReceiveAddress is the only
 // writer, which is what keeps the highlighted address and the QR in step.
