@@ -21,8 +21,11 @@ const { spawn, execFileSync } = require('child_process');
 const SELF_EXEC_PATH = process.env.PORTABLE_EXECUTABLE_FILE || process.env.APPIMAGE || process.execPath;
 
 // RPC Config
-const RPC_USER = 'gaelrpc';
 const RPC_PORT = 18080;
+// The name every installation used before it was generated. Kept because a
+// config that exists but names no user has to keep behaving as it did.
+const DEFAULT_RPC_USER = 'gaelrpc';
+let RPC_USER = null;
 
 // Market prices. Fetched apart from the balance handler so a slow or
 // unreachable CoinGecko never delays the wallet balance.
@@ -31,10 +34,35 @@ const MARKET_MIN_INTERVAL_MS = 60000;
 let marketCache = null;        // { prices, fetchedAt }
 let marketLastAttempt = 0;
 
+// Deliberately not getDataDir, which creates the directory. Reading credentials
+// must not have that side effect.
+function getConfPath() {
+  const dataDir = process.platform === 'win32' ? path.join(app.getPath('appData'), 'Gaelium') : path.join(require('os').homedir(), '.gaelium');
+  return path.join(dataDir, 'gaelium.conf');
+}
+
+// Read the existing user from the config, or generate one for a fresh install.
+// The config is the authority, exactly as it already is for the password. That
+// is what makes this safe to change: an installation that already has a config
+// keeps whatever name that config carries, so it can still reach a daemon that
+// an earlier version started, both right now and at every later launch. Only a
+// machine with no config at all ever sees a generated name.
+function getRpcUser() {
+  const confPath = getConfPath();
+  if (fs.existsSync(confPath)) {
+    const conf = fs.readFileSync(confPath, 'utf8');
+    const match = conf.match(/^rpcuser=(.+)$/m);
+    if (match) return match[1].trim();
+    // A config with no user line is left as it is. Answering with the name this
+    // wallet has always assumed keeps that case exactly as it was.
+    return DEFAULT_RPC_USER;
+  }
+  return 'gaelrpc_' + require('crypto').randomBytes(12).toString('hex');
+}
+
 // Read existing password from config or generate once
 function getRpcPassword() {
-  const dataDir = process.platform === 'win32' ? path.join(app.getPath('appData'), 'Gaelium') : path.join(require('os').homedir(), '.gaelium');
-  const confPath = path.join(dataDir, 'gaelium.conf');
+  const confPath = getConfPath();
   if (fs.existsSync(confPath)) {
     const conf = fs.readFileSync(confPath, 'utf8');
     const match = conf.match(/rpcpassword=(.+)/);
@@ -72,6 +100,7 @@ function ensureConfig() {
   const confPath = path.join(dataDir, 'gaelium.conf');
   
   if (!fs.existsSync(confPath)) {
+    if (!RPC_USER) RPC_USER = getRpcUser();
     if (!RPC_PASS) RPC_PASS = getRpcPassword();
     const config = `rpcuser=${RPC_USER}
 rpcpassword=${RPC_PASS}
@@ -83,6 +112,7 @@ addnode=seed3.gaelium.io
 `;
     fs.writeFileSync(confPath, config);
   } else {
+    RPC_USER = getRpcUser();
     RPC_PASS = getRpcPassword();
   }
   return dataDir;
@@ -165,6 +195,10 @@ function rpcCall(method, params = []) {
       params: params
     });
 
+    // The window is created before the daemon is started, so a call can reach
+    // here before ensureConfig has run. Resolving the user on the spot removes
+    // that ordering from the picture.
+    if (!RPC_USER) RPC_USER = getRpcUser();
     const options = {
       hostname: '127.0.0.1',
       port: RPC_PORT,
