@@ -404,7 +404,15 @@ const POLL_SYNCED_MS = 10000;
 // of the load from the interval where every timeout was recorded, and costs
 // nothing but a slower moving number.
 const POLL_SYNCING_MS = 30000;
-let _pollDelayMs = POLL_SYNCED_MS;
+// Period while the daemon has never answered. A start takes about three seconds
+// on a fresh datadir, and during those seconds the daemon answers every call
+// immediately with the phase it is in, so asking often costs nothing and it is
+// what turns a blank dashboard into a filled one within a second or two of the
+// daemon being ready. At ten seconds a start that took three could leave the
+// screen empty for seven more.
+const POLL_STARTUP_MS = 1500;
+// Starts fast and stays fast until the first answer arrives.
+let _pollDelayMs = POLL_STARTUP_MS;
 
 async function updateDashboard() {
   if (_dashboardInFlight) return;
@@ -427,6 +435,9 @@ async function updateDashboard() {
       } else if (_consecutiveFailures >= FAILURE_NOTICE_AFTER) {
         document.getElementById('balanceAddress').textContent = 'Still waiting for Gaelium Core to answer...';
       }
+      // Keep asking quickly until there has been a first answer. The slower
+      // period is for a daemon that is running, not for one still starting.
+      if (!_daemonHasAnswered) _pollDelayMs = POLL_STARTUP_MS;
       // A missed poll on its own changes nothing else. The main text goes on
       // saying what the last answer said and the greyed counters carry the rest,
       // because one poll that did not come back is plumbing, not news.
