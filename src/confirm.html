@@ -1,0 +1,83 @@
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self';">
+<title>Confirm</title>
+<style>
+:root {
+  --bg-primary: #0a0f1a;
+  --bg-card: #1a2236;
+  --border: rgba(13, 181, 132, 0.12);
+  --border-active: rgba(13, 181, 132, 0.35);
+  --green: #088a63;
+  --green-light: #0db584;
+  --green-soft: rgba(13, 181, 132, 0.08);
+  --text-primary: #e8ecf4;
+  --text-secondary: #b0bdd0;
+  --text-muted: #8a96ad;
+  --yellow: #f0b429;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Outfit', system-ui, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  user-select: none;
+  border: 1px solid var(--border-active);
+}
+.head {
+  padding: 16px 22px 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--yellow);
+}
+.body { padding: 14px 22px; flex: 1; overflow-y: auto; }
+/* The address lives here, in the one place the eye actually reads, and it can be
+   selected and copied like every other value in this wallet. */
+.message {
+  font-size: 15px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  color: var(--text-primary);
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+.detail {
+  margin-top: 14px;
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  color: var(--text-secondary);
+  user-select: text;
+  -webkit-user-select: text;
+}
+.actions {
+  display: flex; gap: 10px; justify-content: flex-end;
+  padding: 14px 22px 18px;
+  border-top: 1px solid var(--border);
+}
+button {
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  padding: 10px 18px; border-radius: 9px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary);
+  transition: all 0.15s;
+}
+button:hover { border-color: var(--border-active); }
+button:focus-visible { outline: 2px solid var(--green-light); outline-offset: 2px; }
+#ok { background: linear-gradient(135deg, var(--green), var(--green-light)); border-color: transparent; color: #ffffff; }
+#ok:hover { box-shadow: 0 4px 16px rgba(8,138,99,0.35); }
+</style>
+<div class="head" id="title"></div>
+<div class="body">
+  <div class="message" id="message"></div>
+  <div class="detail" id="detail"></div>
+</div>
+<div class="actions">
+  <button type="button" id="cancel"></button>
+  <button type="button" id="ok"></button>
+</div>
+<script src="confirm.js"></script>

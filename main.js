@@ -997,6 +997,136 @@ let sendRefusedUntil = 0;
 // than this.
 const SEND_REFUSAL_COOLDOWN_MS = 2000;
 
+// Confirmation, in a window of our own, with the system box as a net.
+//
+// The system box is correct and ugly. A window of our own is neither correct by
+// default nor ugly, so it gets a net: if it does not load, does not appear, or
+// does not take the keyboard within a short deadline, it is destroyed and the
+// system box opens instead. A wallet whose confirmation cannot be styled is a
+// nuisance; a wallet that cannot send is a fault.
+//
+// The four conditions this window has to meet, and where each is met:
+//   its own webContents           the BrowserWindow created below, never the
+//                                 main one, which cannot reach another
+//   never preload.js              preload is src/confirm-preload.js, which
+//                                 exposes two functions and nothing else
+//   content pushed, never pulled  the payload is sent on did-finish-load, the
+//                                 window asks for nothing
+//   the answer's sender checked   event.sender.id is compared to this window's
+//                                 webContents, so a message from the main
+//                                 renderer is dropped
+//
+// Two and a half seconds. Creating a window and loading a local file takes under
+// two hundred milliseconds, so this is more than ten times the normal case, and
+// short enough that someone facing a window that will not work waits a moment
+// rather than a minute. Past it the wait belongs to the user, exactly as it does
+// with the system box.
+const CONFIRM_READY_DEADLINE_MS = 2500;
+const CONFIRM_ANSWER_CHANNEL = 'confirm-answer';
+
+function showThemedConfirmation(options) {
+  return new Promise((resolve) => {
+    let settled = false;
+    let loaded = false;
+    let visible = false;
+    let deadline = null;
+    let win = null;
+
+    // Every exit goes through here, so there is exactly one answer per call and
+    // no path can leave the promise pending for a technical reason.
+    const done = (value) => {
+      if (settled) return;
+      settled = true;
+      if (deadline) { clearTimeout(deadline); deadline = null; }
+      ipcMain.removeListener(CONFIRM_ANSWER_CHANNEL, onAnswer);
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.removeListener('closed', onParentGone);
+      const w = win;
+      win = null;
+      if (w && !w.isDestroyed()) { try { w.destroy(); } catch (e) {} }
+      resolve(value);
+    };
+
+    function onAnswer(event, approved) {
+      if (!win || win.isDestroyed()) return;
+      // Only the window this call created may answer. Anything else, the main
+      // renderer included, is dropped, and the listener stays for the real one.
+      if (event.sender.id !== win.webContents.id) return;
+      done({ ok: true, approved: approved === true });
+    }
+    function onParentGone() { done({ ok: true, approved: false }); }
+
+    try {
+      win = new BrowserWindow({
+        parent: mainWindow,
+        modal: true,
+        show: false,
+        width: 480,
+        height: 340,
+        resizable: false,
+        minimizable: false,
+        maximizable: false,
+        fullscreenable: false,
+        frame: false,
+        backgroundColor: '#0a0f1a',
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+          sandbox: true,
+          preload: path.join(__dirname, 'src', 'confirm-preload.js')
+        }
+      });
+    } catch (e) {
+      done({ ok: false });
+      return;
+    }
+
+    ipcMain.on(CONFIRM_ANSWER_CHANNEL, onAnswer);
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.once('closed', onParentGone);
+
+    deadline = setTimeout(() => {
+      const usable = loaded && visible && win && !win.isDestroyed() && win.isFocused();
+      if (usable) return;
+      done({ ok: false });
+    }, CONFIRM_READY_DEADLINE_MS);
+
+    win.webContents.on('did-finish-load', () => {
+      loaded = true;
+      try {
+        win.webContents.send('confirm-data', {
+          title: options.title,
+          message: options.message,
+          detail: options.detail,
+          confirmLabel: options.buttons[1],
+          cancelLabel: options.buttons[0]
+        });
+        win.show();
+        win.focus();
+        visible = true;
+      } catch (e) {
+        done({ ok: false });
+      }
+    });
+    win.webContents.on('did-fail-load', () => done({ ok: false }));
+    win.webContents.on('render-process-gone', () => done({ ok: false }));
+    win.on('closed', () => { win = null; done({ ok: true, approved: false }); });
+
+    try {
+      win.loadFile(path.join(__dirname, 'src', 'confirm.html'));
+    } catch (e) {
+      done({ ok: false });
+    }
+  });
+}
+
+// One confirmation, never two and never none. The themed window is destroyed
+// before the system box opens, and the system box only opens when the themed one
+// produced no answer at all.
+async function askConfirmation(options) {
+  const themed = await showThemedConfirmation(options);
+  if (themed.ok) return { response: themed.approved ? 1 : 0 };
+  return dialog.showMessageBox(mainWindow, options);
+}
+
 function buildSendConfirmation(plan) {
   const amount = plan.amount.toFixed(8);
   const detail = [
@@ -1042,7 +1172,7 @@ ipcMain.handle('rpc-confirmsend', async (event, planId) => {
   sendConfirmInFlight = true;
   let approved = false;
   try {
-    const answer = await dialog.showMessageBox(mainWindow, buildSendConfirmation(plan));
+    const answer = await askConfirmation(buildSendConfirmation(plan));
     approved = answer.response === 1;
   } catch (e) {
     approved = false;
@@ -1173,7 +1303,7 @@ ipcMain.handle('rpc-dumpprivkey', async (event, address) => {
   keyExportInFlight = true;
   let approved = false;
   try {
-    const answer = await dialog.showMessageBox(mainWindow, {
+    const answer = await askConfirmation({
       type: 'warning',
       noLink: true,
       title: 'Reveal private key',
