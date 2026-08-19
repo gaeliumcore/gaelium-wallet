@@ -1,5 +1,28 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 
+// The window may load the application and nothing else.
+//
+// preload.js attaches to every page this window loads, not only to ours. A
+// navigation to a remote page would therefore hand that page window.gaelium
+// entire: dumpPrivKey, prepareSend, confirmSend. The page would carry its own
+// content security policy, so it would also have fetch to send what it took. Our
+// policy is a meta tag inside index.html and does not survive leaving it.
+//
+// Nothing in the application navigates. There is no anchor with an href, no
+// form, no target, no iframe, and no call to location or window.open in the
+// renderer, all of which was checked. So anything that tries is not us: a script
+// that should not be running, or a file dropped onto the window, which Chromium
+// otherwise follows to a file URL.
+//
+// This does not touch shell.openExternal. That hands a string to the operating
+// system from this process and never goes through a web contents, so the two
+// explorer handlers keep opening the browser exactly as before.
+app.on('web-contents-created', (event, contents) => {
+  contents.on('will-navigate', (e) => { e.preventDefault(); });
+  contents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  contents.on('will-attach-webview', (e) => { e.preventDefault(); });
+});
+
 // The explorer address is built here and nowhere else. shell.openExternal hands
 // a string to the operating system, which will honour schemes that have nothing
 // to do with the web, so the renderer is never allowed to supply a URL. It sends
