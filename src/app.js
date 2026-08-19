@@ -1039,18 +1039,12 @@ async function exportPrivateKey() {
   }
   st.className='status-msg'; st.textContent='';
   pendingPlanId=plan.planId;
-  document.getElementById('confirmAmount').textContent=plan.amount.toFixed(8) + ' GAEL';
-  document.getElementById('confirmAddress').textContent=plan.address;
-  document.getElementById('confirmFee').textContent=plan.fee.toFixed(8) + ' GAEL';
-  document.getElementById('confirmTotal').textContent=plan.total.toFixed(8) + ' GAEL';
-  const w=document.getElementById('confirmFeeWarning');
-  if (plan.warn) {
-    w.textContent='The network fee is '+plan.warnPercent+' percent of the amount you are sending. Check the amount before confirming.';
-    w.style.display='block';
-  } else {
-    w.textContent=''; w.style.display='none';
-  }
-  document.getElementById('confirmModal').classList.add('active');
+  // The confirmation belongs to the main process now. It draws a dialog this
+  // renderer cannot forge, from the figures it holds itself, so a window drawn
+  // here would prove nothing and would only add a click. Going straight there
+  // keeps a payment at two clicks: Send Transaction, then Send in the dialog.
+  // The modal in index.html is no longer opened by anything.
+  await confirmSend();
 }
 async function fillMaxAmount() {
   // The largest sendable amount is the whole balance minus the fee of the
@@ -1090,7 +1084,8 @@ async function confirmSend() {
   btn.disabled=true; btn.textContent='Sending...';
   try {
     const tx=await window.gaelium.confirmSend(planId);
-    if (tx.error) { const errMsg = tx.error.message||tx.error; if (String(errMsg).includes('Insufficient') || String(errMsg).includes('Amount exceeds')) { st.className='status-msg error'; st.textContent='Insufficient funds: the balance does not cover this amount plus the network fee. Use Max to fill in the largest amount you can send.'; } else { st.className='status-msg error'; st.textContent='Error: '+errMsg; } }
+    if (tx && tx.cancelled) { st.className='status-msg'; st.textContent='Payment cancelled. Nothing was sent.'; }
+    else if (tx.error) { const errMsg = tx.error.message||tx.error; if (String(errMsg).includes('Insufficient') || String(errMsg).includes('Amount exceeds')) { st.className='status-msg error'; st.textContent='Insufficient funds: the balance does not cover this amount plus the network fee. Use Max to fill in the largest amount you can send.'; } else { st.className='status-msg error'; st.textContent='Error: '+errMsg; } }
     else {
       st.className='status-msg success'; st.textContent='Sent! TxID: '+tx.substring(0,24)+'...';
       document.getElementById('sendAddress').value='';

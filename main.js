@@ -983,11 +983,85 @@ ipcMain.handle('rpc-maxamount', async () => {
   }
 });
 
+// The renderer draws its own windows, so a confirmation it draws proves nothing.
+// A compromised renderer can show one address and have another priced and sent,
+// and until now three calls with no interaction at all emptied the wallet. This
+// dialog belongs to the main process. Every word of it is built from the plan
+// this process holds, the renderer supplies nothing but a plan id, and the
+// answer never leaves this process.
+let sendConfirmInFlight = false;
+let sendRefusedUntil = 0;
+// Two seconds. Long enough that a loop cannot pour boxes onto the screen, short
+// enough to be invisible to someone who cancelled by mistake: retrying goes
+// through the form and a fresh preparation first, which already takes longer
+// than this.
+const SEND_REFUSAL_COOLDOWN_MS = 2000;
+
+function buildSendConfirmation(plan) {
+  const amount = plan.amount.toFixed(8);
+  const detail = [
+    'Network fee    ' + plan.fee.toFixed(8) + ' GAEL',
+    'Total debited  ' + addAmounts(plan.amount, plan.fee).toFixed(8) + ' GAEL'
+  ];
+  const verdict = feeVerdict(plan.fee, plan.amount);
+  if (verdict.warn) {
+    detail.push('', 'The fee is ' + Math.round(verdict.percent) + ' per cent of the amount.');
+  }
+  detail.push('', 'This is the transaction that will be broadcast. Check the address: a payment cannot be reversed.');
+  return {
+    type: 'warning',
+    noLink: true,
+    title: 'Confirm payment',
+    // The address goes in the message, which is the only field the eye reads.
+    message: 'Send ' + amount + ' GAEL to\n' + plan.address,
+    detail: detail.join('\n'),
+    // The amount sits on the button, so it cannot be approved without being
+    // under the cursor. Cancel is both the default and the escape key.
+    buttons: ['Cancel', 'Send ' + amount + ' GAEL'],
+    defaultId: 0,
+    cancelId: 0
+  };
+}
+
 ipcMain.handle('rpc-confirmsend', async (event, planId) => {
   const plan = pendingSendPlan;
   if (!planIsUsable(plan, planId, Date.now())) {
     pendingSendPlan = null;
     return { error: 'No valid prepared transaction. Prepare the payment again.' };
+  }
+  // Refused rather than queued, so nothing can stack boxes on the screen. Set
+  // before the first await, which is also what keeps two concurrent calls from
+  // both getting past the check above now that a wait sits between it and the
+  // moment the plan is taken out.
+  if (sendConfirmInFlight) {
+    return { error: 'A payment is already waiting for confirmation.' };
+  }
+  if (Date.now() < sendRefusedUntil) {
+    return { error: 'A payment was just cancelled. Try again in a moment.' };
+  }
+  sendConfirmInFlight = true;
+  let approved = false;
+  try {
+    const answer = await dialog.showMessageBox(mainWindow, buildSendConfirmation(plan));
+    approved = answer.response === 1;
+  } catch (e) {
+    approved = false;
+  } finally {
+    sendConfirmInFlight = false;
+  }
+  if (!approved) {
+    // Destroyed rather than kept, so a refused payment cannot be put back in
+    // front of a distracted user later. Preparing again costs nothing and
+    // reserves no output.
+    pendingSendPlan = null;
+    sendRefusedUntil = Date.now() + SEND_REFUSAL_COOLDOWN_MS;
+    return { cancelled: true };
+  }
+  // Checked again, because the box may have stood open past the life of the
+  // plan, and a stale one can spend outputs that have since gone elsewhere.
+  if (!planIsUsable(pendingSendPlan, planId, Date.now())) {
+    pendingSendPlan = null;
+    return { error: 'The payment took too long to confirm. Prepare it again.' };
   }
   // Taken out of the module before anything is awaited, so a second confirm
   // cannot find the same plan and broadcast the transaction twice. The plan is
