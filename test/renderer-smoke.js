@@ -130,7 +130,7 @@ function el(id) {
     appendChild() {}, remove() {}, getContext() { return null; } };
   elements[id] = e; return e;
 }
-const rejets = [];
+const rejections = [];
 const box = {
   console: { log() {}, warn() {}, error() {} },
   document: {
@@ -153,15 +153,15 @@ box.window.gaelium.listTransactions = () => Promise.resolve([]);
 box.window.gaelium.getMarketPrices = () => Promise.resolve(null);
 
 const ctx = vm.createContext(box);
-process.on('unhandledRejection', e => rejets.push(e && e.message ? e.message : String(e)));
-let charge = true;
+process.on('unhandledRejection', e => rejections.push(e && e.message ? e.message : String(e)));
+let loaded = true;
 try {
   vm.runInContext(src, ctx, { filename: 'src/app.js' });
 } catch (e) {
-  charge = false;
+  loaded = false;
   fail('src/app.js throws on load: ' + e.message);
 }
-if (charge) ok('src/app.js loads without throwing');
+if (loaded) ok('src/app.js loads without throwing');
 
 // --- 4. the confirmation window actually fills itself ---
 //
@@ -192,28 +192,28 @@ if (charge) ok('src/app.js loads without throwing');
   else if (GLOBALS_WINDOW.has(expose[1])) fail("confirm-preload exposes '" + expose[1] + "', which window already carries");
   else ok("the window bridge is named '" + expose[1] + "', free of any collision");
 
-  const idsDeclares = new Set([...chtml.matchAll(/id="([^"]+)"/g)].map(m => m[1]));
+  const declaredIds = new Set([...chtml.matchAll(/id="([^"]+)"/g)].map(m => m[1]));
   const elements = {};
-  let clics = 0, clavier = 0, ack = false, reponse = null, focusMis = null;
+  let clicks = 0, keyListeners = 0, ack = false, answered = null, focusedId = null;
   function elem(id) {
     if (elements[id]) return elements[id];
-    elements[id] = { _id: id, textContent: '', focus() { focusMis = id; }, addEventListener() { clics++; } };
+    elements[id] = { _id: id, textContent: '', focus() { focusedId = id; }, addEventListener() { clicks++; } };
     return elements[id];
   }
   const bridgeName = expose ? expose[1] : 'gaeliumConfirm';
   let onDataCb = null;
-  const fenetre = {};
-  fenetre[bridgeName] = {
+  const windowStub = {};
+  windowStub[bridgeName] = {
     onData: (cb) => { onDataCb = cb; },
     ready: () => { ack = true; },
-    answer: (v) => { reponse = v; }
+    answer: (v) => { answered = v; }
   };
   const scope = {
     document: {
-      getElementById: (id) => (idsDeclares.has(id) ? elem(id) : null),
-      addEventListener: () => { clavier++; }
+      getElementById: (id) => (declaredIds.has(id) ? elem(id) : null),
+      addEventListener: () => { keyListeners++; }
     },
-    window: fenetre
+    window: windowStub
   };
   scope.window.document = scope.document;
   scope.window.window = scope.window;
@@ -221,7 +221,7 @@ if (charge) ok('src/app.js loads without throwing');
   try { vm.runInNewContext(cjs, scope, { filename: 'src/confirm.js' }); }
   catch (e) { boom = e; }
   if (boom) { fail('src/confirm.js throws: ' + boom.message); return; }
-  if (clics < 2 || clavier < 1) fail('buttons or keyboard are not wired, clicks=' + clics + ' keyboard=' + clavier);
+  if (clicks < 2 || keyListeners < 1) fail('buttons or keyboard are not wired, clicks=' + clicks + ' keyboard=' + keyListeners);
   if (!onDataCb) { fail('src/confirm.js does not subscribe to the payload'); return; }
 
   // The payload the main process sends, same shape, same field names.
@@ -232,18 +232,18 @@ if (charge) ok('src/app.js loads without throwing');
     confirmLabel: 'Send 12.50000000 GAEL',
     cancelLabel: 'Cancel'
   });
-  const manquants = ['title', 'message', 'detail', 'ok', 'cancel']
+  const missing = ['title', 'message', 'detail', 'ok', 'cancel']
     .filter(id => !elements[id] || !elements[id].textContent);
-  if (manquants.length) fail('the window stays blank on: ' + manquants.join(', '));
+  if (missing.length) fail('the window stays blank on: ' + missing.join(', '));
   else if (!elements.message.textContent.includes('GKRZSWuxjBiGXxGT9HvY8JvvBbFpnKUG6u'))
     fail("the address is not written into the window");
   else if (!ack) fail('the window does not acknowledge, the fallback would fire on every send');
-  else if (focusMis !== 'cancel') fail('initial focus is not on Cancel, it is on ' + focusMis);
+  else if (focusedId !== 'cancel') fail('initial focus is not on Cancel, it is on ' + focusedId);
   else ok('the confirmation window displays its content and acknowledges it');
 })();
 
 setTimeout(() => {
-  const refs = rejets.filter(m => /is not defined|is not a function|of (null|undefined)/.test(m));
+  const refs = rejections.filter(m => /is not defined|is not a function|of (null|undefined)/.test(m));
   if (refs.length) {
     fail('reference exceptions during polling (' + refs.length + '):');
     [...new Set(refs)].forEach(m => console.log('           ' + m));
