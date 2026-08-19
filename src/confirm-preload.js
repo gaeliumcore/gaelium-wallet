@@ -4,11 +4,10 @@
 // dumpPrivKey and prepareSend included, and handing it to the very window whose
 // job is to guard those calls would undo the entire exercise.
 //
-// The name matters. The first version of this file used 'confirm', which is
-// already a method of window in every browser. Exposing on top of it left
-// window.confirm as the native function, so the first line of the window's
-// script threw, nothing was wired, and the user faced a window with two blank
-// buttons that answered to nothing. The name below exists nowhere else.
+// The name matters. A bridge exposed under a name window already carries, such
+// as confirm, does not replace it. The native property wins, the first line of
+// the window's script throws, and nothing is wired: the buttons are drawn and
+// answer to nothing. The name below exists nowhere else.
 //
 // Three functions. Receive what the main process decided to display, tell it the
 // display actually happened, and send back yes or no. No wallet, no daemon, no

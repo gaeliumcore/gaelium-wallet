@@ -1,26 +1,27 @@
 // Renderer smoke test.
 //
-// Two commits on the eighteenth of August cut four hundred lines out of
-// src/app.js between a pair of textual markers, taking the send path, the
-// Receive screen and the explorer handlers with them. node --check saw nothing,
-// because a call to a function that does not exist is valid JavaScript, and the
-// result shipped. This is the check that would have caught it in a second.
+// node --check accepts a call to a function that does not exist, so a deletion
+// in src/app.js can pass every syntax check and still ship a screen that does
+// nothing. These checks ask the questions a parser does not.
 //
 // Run: node test/renderer-smoke.js
 // Exit code 0 if clean, 1 if anything is missing.
 //
-// Three checks, in order of how early they catch a mistake:
+// The checks, in order of how early they catch a mistake:
 //   1. every name called in src/app.js is defined somewhere, or is a browser
 //      global. This is the one that catches a deletion.
 //   2. every element id the renderer reaches for exists, either declared in
 //      src/index.html or built by the renderer itself. This catches a wiring
 //      that leads nowhere after a rename or a removal.
-//   3. the file loads and its polling runs in a simulated DOM without throwing.
+//   3. src/app.js loads and polls in a simulated DOM without throwing, and no
+//      reference error surfaces while it polls.
+//   4. the confirmation window fills itself and acknowledges it, and its
+//      bridge is named something window does not already carry.
 //
 // There is deliberately no list of expected function names to keep in step. A
 // frozen inventory rots: it has to be edited by hand on every legitimate change,
 // and a contributor who adds a function should not have to discover why the
-// build refuses it. The two checks above are derived from the code itself.
+// build refuses it. Every check above is derived from the code itself.
 
 const fs = require('fs');
 const vm = require('vm');
@@ -33,15 +34,13 @@ const HTML = path.join(ROOT, 'src', 'index.html');
 const src = fs.readFileSync(APP, 'utf8');
 const html = fs.readFileSync(HTML, 'utf8');
 let failed = false;
-function fail(msg) { failed = true; console.log('  ECHEC  ' + msg); }
+function fail(msg) { failed = true; console.log('  FAIL   ' + msg); }
 function ok(msg) { console.log('  ok     ' + msg); }
 
 // Strings and comments are blanked before looking for calls, so that colours
 // written as rgba(...) inside a style string are not taken for functions. Every
 // blanked region keeps its line breaks, otherwise a single mismatched quote
-// swallows the rest of the file and the check silently inspects nothing. That
-// happened on the first draft of this tool: it collapsed seven hundred lines
-// into nine and reported two problems out of twenty five.
+// swallows the rest of the file and the check silently inspects nothing.
 const blank = m => m.replace(/[^\n]/g, ' ');
 function stripped(s) {
   return s
@@ -87,10 +86,10 @@ lines.forEach((line, i) => {
   }
 });
 if (called.size) {
-  fail('fonctions appelees et jamais definies dans src/app.js :');
-  for (const [n, l] of called) console.log('           ' + n + '   premier appel ligne ' + l);
+  fail('functions called but never defined in src/app.js:');
+  for (const [n, l] of called) console.log('           ' + n + '   first call line ' + l);
 } else {
-  ok('toute fonction appelee est definie');
+  ok('every function called is defined');
 }
 
 // --- 2. every id the renderer reaches for actually exists ---
@@ -111,10 +110,10 @@ src.split('\n').forEach((line, i) => {
     if (!pageIds.has(m[1]) && !wanted.has(m[1])) wanted.set(m[1], i + 1);
 });
 if (wanted.size) {
-  fail('ids demandes par src/app.js et introuvables, ni dans la page ni construits :');
-  for (const [n, l] of wanted) console.log('           ' + n + '   ligne ' + l);
+  fail('ids src/app.js reaches for that exist neither in the page nor in the renderer:');
+  for (const [n, l] of wanted) console.log('           ' + n + '   line ' + l);
 } else {
-  ok('les ' + pageIds.size + ' ids connus couvrent les ' + new Set([...src.matchAll(/getElementById\(\s*['"]([^'"]+)['"]\s*\)/g)].map(m => m[1])).size + ' demandes du renderer');
+  ok('the ' + pageIds.size + ' known ids cover the ' + new Set([...src.matchAll(/getElementById\(\s*['"]([^'"]+)['"]\s*\)/g)].map(m => m[1])).size + ' the renderer asks for');
 }
 
 // --- 3. the file loads and polls without throwing ---
@@ -160,15 +159,15 @@ try {
   vm.runInContext(src, ctx, { filename: 'src/app.js' });
 } catch (e) {
   charge = false;
-  fail('src/app.js leve au chargement : ' + e.message);
+  fail('src/app.js throws on load: ' + e.message);
 }
-if (charge) ok('src/app.js se charge sans exception');
+if (charge) ok('src/app.js loads without throwing');
 
 // --- 4. the confirmation window actually fills itself ---
 //
-// Six proved scenarios went by without catching a window that loaded, took the
-// keyboard and stayed blank, because none of them looked at what it displays.
-// This one runs src/confirm.js against the ids src/confirm.html declares, hands
+// Loading, focus and exceptions can all be satisfied by a window that stays
+// blank, which is the failure the fallback exists to catch, so this check looks
+// at what the window displays. It runs src/confirm.js against the ids src/confirm.html declares, hands
 // it the payload the main process sends, and checks that the text lands and that
 // the window acknowledges it.
 (function confirmWindow() {
@@ -176,7 +175,7 @@ if (charge) ok('src/app.js se charge sans exception');
   const CJ = path.join(ROOT, 'src', 'confirm.js');
   const CP = path.join(ROOT, 'src', 'confirm-preload.js');
   if (!fs.existsSync(CH) || !fs.existsSync(CJ) || !fs.existsSync(CP)) {
-    fail('la fenetre de confirmation est incomplete'); return;
+    fail('the confirmation window is incomplete'); return;
   }
   const chtml = fs.readFileSync(CH, 'utf8');
   const cjs = fs.readFileSync(CJ, 'utf8');
@@ -189,9 +188,9 @@ if (charge) ok('src/app.js se charge sans exception');
     'name','status','length','top','self','parent','frames','location','history','navigator',
     'document','screen','crypto','performance','localStorage','sessionStorage','fetch','postMessage']);
   const expose = cpre.match(/exposeInMainWorld\(\s*'([^']+)'/);
-  if (!expose) fail('confirm-preload n expose rien');
-  else if (GLOBALS_WINDOW.has(expose[1])) fail("confirm-preload expose '" + expose[1] + "', qui existe deja sur window");
-  else ok("le pont de la fenetre s appelle '" + expose[1] + "', libre de toute collision");
+  if (!expose) fail('confirm-preload exposes nothing');
+  else if (GLOBALS_WINDOW.has(expose[1])) fail("confirm-preload exposes '" + expose[1] + "', which window already carries");
+  else ok("the window bridge is named '" + expose[1] + "', free of any collision");
 
   const idsDeclares = new Set([...chtml.matchAll(/id="([^"]+)"/g)].map(m => m[1]));
   const elements = {};
@@ -221,9 +220,9 @@ if (charge) ok('src/app.js se charge sans exception');
   let boom = null;
   try { vm.runInNewContext(cjs, scope, { filename: 'src/confirm.js' }); }
   catch (e) { boom = e; }
-  if (boom) { fail('src/confirm.js leve : ' + boom.message); return; }
-  if (clics < 2 || clavier < 1) fail('les boutons ou le clavier ne sont pas cables, clics=' + clics + ' clavier=' + clavier);
-  if (!onDataCb) { fail('src/confirm.js ne s abonne pas au contenu'); return; }
+  if (boom) { fail('src/confirm.js throws: ' + boom.message); return; }
+  if (clics < 2 || clavier < 1) fail('buttons or keyboard are not wired, clicks=' + clics + ' keyboard=' + clavier);
+  if (!onDataCb) { fail('src/confirm.js does not subscribe to the payload'); return; }
 
   // The payload the main process sends, same shape, same field names.
   onDataCb({
@@ -235,23 +234,23 @@ if (charge) ok('src/app.js se charge sans exception');
   });
   const manquants = ['title', 'message', 'detail', 'ok', 'cancel']
     .filter(id => !elements[id] || !elements[id].textContent);
-  if (manquants.length) fail('la fenetre reste vide sur : ' + manquants.join(', '));
+  if (manquants.length) fail('the window stays blank on: ' + manquants.join(', '));
   else if (!elements.message.textContent.includes('GKRZSWuxjBiGXxGT9HvY8JvvBbFpnKUG6u'))
-    fail("l adresse n est pas ecrite dans la fenetre");
-  else if (!ack) fail('la fenetre n accuse pas reception, le repli se declencherait a chaque envoi');
-  else if (focusMis !== 'cancel') fail('le focus initial n est pas sur Annuler, il est sur ' + focusMis);
-  else ok('la fenetre de confirmation affiche son contenu et en accuse reception');
+    fail("the address is not written into the window");
+  else if (!ack) fail('the window does not acknowledge, the fallback would fire on every send');
+  else if (focusMis !== 'cancel') fail('initial focus is not on Cancel, it is on ' + focusMis);
+  else ok('the confirmation window displays its content and acknowledges it');
 })();
 
 setTimeout(() => {
   const refs = rejets.filter(m => /is not defined|is not a function|of (null|undefined)/.test(m));
   if (refs.length) {
-    fail('exceptions pendant le sondage (' + refs.length + ') :');
+    fail('reference exceptions during polling (' + refs.length + '):');
     [...new Set(refs)].forEach(m => console.log('           ' + m));
   } else {
-    ok('aucune exception de reference pendant le sondage');
+    ok('no reference exception during polling');
   }
   console.log();
-  console.log(failed ? '  RESULTAT : ECHEC' : '  RESULTAT : OK');
+  console.log(failed ? '  RESULT : FAIL' : '  RESULT : OK');
   process.exit(failed ? 1 : 0);
 }, 300);

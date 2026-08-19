@@ -11,9 +11,8 @@
   }
 
   // Wired before anything else, so that no failure further down can leave the
-  // buttons drawn and inert. That is exactly what happened when the bridge was
-  // exposed under a name window already had: the script died on its first line
-  // and these listeners were never attached.
+  // buttons drawn and inert. If the bridge is absent or the payload never
+  // arrives, the window still cancels on a click or on Escape.
   document.getElementById('ok').addEventListener('click', function () { answer(true); });
   document.getElementById('cancel').addEventListener('click', function () { answer(false); });
   // Enter and Escape both cancel, whatever has focus. Enter is the key people

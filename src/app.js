@@ -209,10 +209,9 @@ function formatPrice(n, symbol) {
   if (n >= 0.01) return symbol + n.toLocaleString();
   return symbol + n.toLocaleString(undefined, { maximumSignificantDigits: 5 });
 }
-// QR encoding. Parameters are those of the two mobile wallets so that the same
-// address yields the same symbol everywhere: error correction Q, a one module
-// quiet zone, UTF-8, black on opaque white. See wallet/android QrGenerator.kt
-// and wallet/ios QRCodeGenerator.swift.
+// QR encoding. Parameters match those of the Gaelium mobile wallets so that the
+// same address yields the same symbol everywhere: error correction Q, a one
+// module quiet zone, UTF-8, black on opaque white.
 //
 // The payload is encoded BARE, never wrapped in a gaelium: URI. Android puts a
 // scanned payload straight into its field without stripping anything, so a
@@ -346,7 +345,7 @@ let _daemonHasAnswered = false;
 // measured at one for the whole of a sync from block zero to block thirty
 // thousand.
 let _syncTarget = 0;
-// Peer heights lag the tip by a block or two while one is being announced.
+// Peer heights lag the tip by a block or two while a new block propagates.
 const TARGET_TOLERANCE = 4;
 // Share of the progress figure the header phase is worth. Headers take about
 // forty five seconds and blocks about twenty minutes on the same machine, so
@@ -714,12 +713,11 @@ async function updateDashboard() {
 
 // Schedules the next run only once the current one has settled, so the gap
 // between two runs is a real gap and never an overlap.
-// One loop for both polls, and the reason it is written this way is the bug that
-// blanked the screen tonight. The previous version was a then with no catch, so
-// a single exception anywhere in the body left nothing to rearm the timer and
-// the wallet sat on its opening text until it was closed. Here the catch comes
-// before the then, and the call itself is wrapped, so the next run is armed
-// whatever happens, including a synchronous throw.
+// One loop for both polls. A then with no catch is a loop that dies on its first
+// exception: nothing rearms the timer and the screen stays on whatever it last
+// displayed until the window is closed. Here the catch comes before the then,
+// and the call itself is wrapped, so the next run is armed whatever happens,
+// including a synchronous throw.
 function loop(run, delay) {
   const tick = () => {
     let p;
@@ -1044,11 +1042,10 @@ async function exportPrivateKey() {
   }
   st.className='status-msg'; st.textContent='';
   pendingPlanId=plan.planId;
-  // The confirmation belongs to the main process now. It draws a dialog this
+  // The confirmation belongs to the main process. It draws a dialog this
   // renderer cannot forge, from the figures it holds itself, so a window drawn
   // here would prove nothing and would only add a click. Going straight there
   // keeps a payment at two clicks: Send Transaction, then Send in the dialog.
-  // The modal in index.html is no longer opened by anything.
   await confirmSend();
 }
 async function fillMaxAmount() {

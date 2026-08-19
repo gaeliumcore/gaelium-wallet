@@ -1009,7 +1009,7 @@ const SEND_REFUSAL_COOLDOWN_MS = 2000;
 //   its own webContents           the BrowserWindow created below, never the
 //                                 main one, which cannot reach another
 //   never preload.js              preload is src/confirm-preload.js, which
-//                                 exposes two functions and nothing else
+//                                 exposes three functions and nothing else
 //   content pushed, never pulled  the payload is sent on did-finish-load, the
 //                                 window asks for nothing
 //   the answer's sender checked   event.sender.id is compared to this window's
