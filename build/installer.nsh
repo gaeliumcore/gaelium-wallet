@@ -1,9 +1,9 @@
 ; --------------------------------------------------------------------------
-; customInit — runs in .onInit, BEFORE the install section reads the registry
+; customInit runs in .onInit, BEFORE the install section reads the registry
 ; to detect the old uninstaller. By deleting UninstallString here we prevent
 ; electron-builder from launching the v1.0.0 uninstaller (which would show a
 ; blockchain-data prompt). We delete both HKLM and HKCU to cover both modes:
-; - HKLM: perMachine install (allusers, requires admin) — the v1.0.0 default
+; - HKLM: perMachine install (allusers, requires admin), the v1.0.0 default
 ; - HKCU: perUser install (current user only)
 ; The installer still overwrites $INSTDIR and re-creates all registry entries,
 ; so nothing is lost. User data in %APPDATA%\Gaelium is never touched.

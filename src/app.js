@@ -691,6 +691,7 @@ async function pollWallet() {
     setLine('balancePending', pp.join(' | '));
     const txs = await window.gaelium.listTransactions(30);
     if (!txs.error && txs.length > 0) {
+      // Genesis block coinbase output, excluded from the displayed history since the February 2026 fix that made it wrongly spendable.
       lastTxList = filterChangeTx(txs.reverse().filter(tx => tx.txid !== '9280011d752efed0c25a1d8a3fbd5d9ba50b953cac65f994b9d95437c9be6cfe'));
       let h = '';
       lastTxList.slice(0, 8).forEach(tx => h += buildTxItem(tx));
@@ -1110,6 +1111,7 @@ async function loadAllTransactions(page) {
     if (!txs.error && txs.length > 0) {
       var hasNext = txs.length > txPageSize;
       var pageTxs = txs.slice(0, txPageSize);
+      // Genesis block coinbase output, excluded from the displayed history since the February 2026 fix that made it wrongly spendable.
       lastTxList = filterChangeTx(pageTxs.reverse().filter(tx => tx.txid !== '9280011d752efed0c25a1d8a3fbd5d9ba50b953cac65f994b9d95437c9be6cfe'));
       var h = '';
       lastTxList.forEach(tx => h += buildTxItem(tx));

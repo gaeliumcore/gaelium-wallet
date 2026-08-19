@@ -23,5 +23,5 @@ Thumbs.db
 .idea/
 *.swp
 
-# Documentation interne dev N1 (jamais sur GitHub public)
-README-dev-n1.md
+# Local development notes
+README-dev-*.md

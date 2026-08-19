@@ -6,15 +6,21 @@
 // because a call to a function that does not exist is valid JavaScript, and the
 // result shipped. This is the check that would have caught it in a second.
 //
-// Run: node tools/renderer-smoke.js
+// Run: node test/renderer-smoke.js
 // Exit code 0 if clean, 1 if anything is missing.
 //
 // Three checks, in order of how early they catch a mistake:
 //   1. every name called in src/app.js is defined somewhere, or is a browser
 //      global. This is the one that catches a deletion.
-//   2. the top level function names match tools/renderer-functions.txt. Any
-//      disappearance has to be declared by editing that file on purpose.
+//   2. every element id the renderer reaches for exists, either declared in
+//      src/index.html or built by the renderer itself. This catches a wiring
+//      that leads nowhere after a rename or a removal.
 //   3. the file loads and its polling runs in a simulated DOM without throwing.
+//
+// There is deliberately no list of expected function names to keep in step. A
+// frozen inventory rots: it has to be edited by hand on every legitimate change,
+// and a contributor who adds a function should not have to discover why the
+// build refuses it. The two checks above are derived from the code itself.
 
 const fs = require('fs');
 const vm = require('vm');
@@ -23,7 +29,6 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const APP = path.join(ROOT, 'src', 'app.js');
 const HTML = path.join(ROOT, 'src', 'index.html');
-const REF = path.join(__dirname, 'renderer-functions.txt');
 
 const src = fs.readFileSync(APP, 'utf8');
 const html = fs.readFileSync(HTML, 'utf8');
@@ -88,24 +93,28 @@ if (called.size) {
   ok('toute fonction appelee est definie');
 }
 
-// --- 2. the inventory has not shrunk ---
-const present = new Set();
-for (const m of src.matchAll(/^\s*(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/gm)) present.add(m[1]);
-if (!fs.existsSync(REF)) {
-  console.log('  note   ' + path.basename(REF) + ' absent, inventaire ecrit pour reference');
-  fs.writeFileSync(REF, [...present].sort().join('\n') + '\n');
+// --- 2. every id the renderer reaches for actually exists ---
+//
+// An id is legitimate if src/index.html declares it, or if src/app.js builds it
+// itself through innerHTML. Anything else is a wiring that leads nowhere: an
+// element renamed in the page, or the code that used to create it removed.
+//
+// This is read from the raw source on purpose, not from the blanked copy used
+// by check 1, because the id lives inside a string literal and blanking the
+// strings would leave this check matching nothing and passing forever.
+const pageIds = new Set([...html.matchAll(/id="([^"]+)"/g)].map(m => m[1]));
+for (const m of src.matchAll(/id="([^"]+)"/g)) pageIds.add(m[1]);
+for (const m of src.matchAll(/id=\\"([^\\"]+)\\"/g)) pageIds.add(m[1]);
+const wanted = new Map();
+src.split('\n').forEach((line, i) => {
+  for (const m of line.matchAll(/getElementById\(\s*['"]([^'"]+)['"]\s*\)/g))
+    if (!pageIds.has(m[1]) && !wanted.has(m[1])) wanted.set(m[1], i + 1);
+});
+if (wanted.size) {
+  fail('ids demandes par src/app.js et introuvables, ni dans la page ni construits :');
+  for (const [n, l] of wanted) console.log('           ' + n + '   ligne ' + l);
 } else {
-  const ref = new Set(fs.readFileSync(REF, 'utf8').split('\n').map(s => s.trim()).filter(Boolean));
-  const perdues = [...ref].filter(n => !present.has(n)).sort();
-  const nouvelles = [...present].filter(n => !ref.has(n)).sort();
-  if (perdues.length) {
-    fail('fonctions de la liste de reference absentes du fichier (' + perdues.length + ') :');
-    perdues.forEach(n => console.log('           ' + n));
-    console.log('           si la suppression est voulue, retirer le nom de ' + path.basename(REF));
-  } else {
-    ok('inventaire complet, ' + ref.size + ' fonctions attendues, toutes presentes');
-  }
-  if (nouvelles.length) ok('nouvelles fonctions non encore declarees : ' + nouvelles.join(', '));
+  ok('les ' + pageIds.size + ' ids connus couvrent les ' + new Set([...src.matchAll(/getElementById\(\s*['"]([^'"]+)['"]\s*\)/g)].map(m => m[1])).size + ' demandes du renderer');
 }
 
 // --- 3. the file loads and polls without throwing ---
