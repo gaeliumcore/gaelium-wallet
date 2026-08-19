@@ -54,6 +54,14 @@ let RPC_USER = null;
 // unreachable CoinGecko never delays the wallet balance.
 const MARKET_IDS = 'bitcoin,ethereum,monero,dogecoin,gaelium';
 const MARKET_MIN_INTERVAL_MS = 60000;
+// A real answer for five identifiers in two currencies is two hundred and two
+// bytes, measured against the live endpoint. Sixty four kilobytes is three
+// hundred times that, far past anything the format can produce and far short of
+// anything that hurts. The body is accumulated in memory before being parsed and
+// was accumulated without any ceiling, so a compromised endpoint, or anyone able
+// to present a certificate for it, could have exhausted the main process by
+// answering with a few hundred megabytes.
+const MARKET_MAX_BYTES = 65536;
 let marketCache = null;        // { prices, fetchedAt }
 let marketLastAttempt = 0;
 
@@ -674,7 +682,18 @@ ipcMain.handle('get-market-prices', async () => {
     }, (r) => {
       if (r.statusCode !== 200) { r.resume(); finish(null); return; }
       let b = '';
-      r.on('data', c => b += c);
+      let received = 0;
+      r.on('data', c => {
+        received += c.length;
+        if (received > MARKET_MAX_BYTES) {
+          // Abandoned rather than parsed. finish carries null, so no cache is
+          // written and the wallet falls back on whatever it had before.
+          req.destroy();
+          finish(null);
+          return;
+        }
+        b += c;
+      });
       r.on('end', () => { try { finish(JSON.parse(b)); } catch (e) { finish(null); } });
     });
     req.setTimeout(10000, () => { req.destroy(); finish(null); });
