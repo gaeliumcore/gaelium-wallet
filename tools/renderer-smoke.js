@@ -155,6 +155,85 @@ try {
 }
 if (charge) ok('src/app.js se charge sans exception');
 
+// --- 4. the confirmation window actually fills itself ---
+//
+// Six proved scenarios went by without catching a window that loaded, took the
+// keyboard and stayed blank, because none of them looked at what it displays.
+// This one runs src/confirm.js against the ids src/confirm.html declares, hands
+// it the payload the main process sends, and checks that the text lands and that
+// the window acknowledges it.
+(function confirmWindow() {
+  const CH = path.join(ROOT, 'src', 'confirm.html');
+  const CJ = path.join(ROOT, 'src', 'confirm.js');
+  const CP = path.join(ROOT, 'src', 'confirm-preload.js');
+  if (!fs.existsSync(CH) || !fs.existsSync(CJ) || !fs.existsSync(CP)) {
+    fail('la fenetre de confirmation est incomplete'); return;
+  }
+  const chtml = fs.readFileSync(CH, 'utf8');
+  const cjs = fs.readFileSync(CJ, 'utf8');
+  const cpre = fs.readFileSync(CP, 'utf8');
+
+  // The name the preload exposes must not already exist on window. Exposing on
+  // top of a built in leaves the built in in place, the window script throws on
+  // its first line, and nothing is wired. That is the bug this check exists for.
+  const GLOBALS_WINDOW = new Set(['confirm','alert','prompt','open','close','print','focus','blur',
+    'name','status','length','top','self','parent','frames','location','history','navigator',
+    'document','screen','crypto','performance','localStorage','sessionStorage','fetch','postMessage']);
+  const expose = cpre.match(/exposeInMainWorld\(\s*'([^']+)'/);
+  if (!expose) fail('confirm-preload n expose rien');
+  else if (GLOBALS_WINDOW.has(expose[1])) fail("confirm-preload expose '" + expose[1] + "', qui existe deja sur window");
+  else ok("le pont de la fenetre s appelle '" + expose[1] + "', libre de toute collision");
+
+  const idsDeclares = new Set([...chtml.matchAll(/id="([^"]+)"/g)].map(m => m[1]));
+  const elements = {};
+  let clics = 0, clavier = 0, ack = false, reponse = null, focusMis = null;
+  function elem(id) {
+    if (elements[id]) return elements[id];
+    elements[id] = { _id: id, textContent: '', focus() { focusMis = id; }, addEventListener() { clics++; } };
+    return elements[id];
+  }
+  const bridgeName = expose ? expose[1] : 'gaeliumConfirm';
+  let onDataCb = null;
+  const fenetre = {};
+  fenetre[bridgeName] = {
+    onData: (cb) => { onDataCb = cb; },
+    ready: () => { ack = true; },
+    answer: (v) => { reponse = v; }
+  };
+  const scope = {
+    document: {
+      getElementById: (id) => (idsDeclares.has(id) ? elem(id) : null),
+      addEventListener: () => { clavier++; }
+    },
+    window: fenetre
+  };
+  scope.window.document = scope.document;
+  scope.window.window = scope.window;
+  let boom = null;
+  try { vm.runInNewContext(cjs, scope, { filename: 'src/confirm.js' }); }
+  catch (e) { boom = e; }
+  if (boom) { fail('src/confirm.js leve : ' + boom.message); return; }
+  if (clics < 2 || clavier < 1) fail('les boutons ou le clavier ne sont pas cables, clics=' + clics + ' clavier=' + clavier);
+  if (!onDataCb) { fail('src/confirm.js ne s abonne pas au contenu'); return; }
+
+  // The payload the main process sends, same shape, same field names.
+  onDataCb({
+    title: 'Confirm payment',
+    message: 'Send 12.50000000 GAEL to\nGKRZSWuxjBiGXxGT9HvY8JvvBbFpnKUG6u',
+    detail: 'Network fee    0.00695508 GAEL',
+    confirmLabel: 'Send 12.50000000 GAEL',
+    cancelLabel: 'Cancel'
+  });
+  const manquants = ['title', 'message', 'detail', 'ok', 'cancel']
+    .filter(id => !elements[id] || !elements[id].textContent);
+  if (manquants.length) fail('la fenetre reste vide sur : ' + manquants.join(', '));
+  else if (!elements.message.textContent.includes('GKRZSWuxjBiGXxGT9HvY8JvvBbFpnKUG6u'))
+    fail("l adresse n est pas ecrite dans la fenetre");
+  else if (!ack) fail('la fenetre n accuse pas reception, le repli se declencherait a chaque envoi');
+  else if (focusMis !== 'cancel') fail('le focus initial n est pas sur Annuler, il est sur ' + focusMis);
+  else ok('la fenetre de confirmation affiche son contenu et en accuse reception');
+})();
+
 setTimeout(() => {
   const refs = rejets.filter(m => /is not defined|is not a function|of (null|undefined)/.test(m));
   if (refs.length) {

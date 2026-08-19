@@ -1023,12 +1023,20 @@ const SEND_REFUSAL_COOLDOWN_MS = 2000;
 // with the system box.
 const CONFIRM_READY_DEADLINE_MS = 2500;
 const CONFIRM_ANSWER_CHANNEL = 'confirm-answer';
+// The window says when its text is actually in the document. Watching the load,
+// the focus and the exceptions was not enough: a window that loaded, took the
+// keyboard and stayed blank passed every one of those checks and left the user
+// with no way out but the task manager. Anything that stops the window filling
+// itself, an exception, a missing element, a bridge that is not there, stops
+// this acknowledgement too, and the fallback takes over.
+const CONFIRM_READY_ACK_CHANNEL = 'confirm-ready';
 
 function showThemedConfirmation(options) {
   return new Promise((resolve) => {
     let settled = false;
     let loaded = false;
     let visible = false;
+    let acked = false;
     let deadline = null;
     let win = null;
 
@@ -1039,6 +1047,7 @@ function showThemedConfirmation(options) {
       settled = true;
       if (deadline) { clearTimeout(deadline); deadline = null; }
       ipcMain.removeListener(CONFIRM_ANSWER_CHANNEL, onAnswer);
+      ipcMain.removeListener(CONFIRM_READY_ACK_CHANNEL, onReady);
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.removeListener('closed', onParentGone);
       const w = win;
       win = null;
@@ -1052,6 +1061,13 @@ function showThemedConfirmation(options) {
       // renderer included, is dropped, and the listener stays for the real one.
       if (event.sender.id !== win.webContents.id) return;
       done({ ok: true, approved: approved === true });
+    }
+    function onReady(event) {
+      if (!win || win.isDestroyed()) return;
+      // Checked exactly like the answer, so the acknowledgement cannot become a
+      // channel the main renderer borrows to pass a blank window off as filled.
+      if (event.sender.id !== win.webContents.id) return;
+      acked = true;
     }
     function onParentGone() { done({ ok: true, approved: false }); }
 
@@ -1081,10 +1097,13 @@ function showThemedConfirmation(options) {
     }
 
     ipcMain.on(CONFIRM_ANSWER_CHANNEL, onAnswer);
+    ipcMain.on(CONFIRM_READY_ACK_CHANNEL, onReady);
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.once('closed', onParentGone);
 
     deadline = setTimeout(() => {
-      const usable = loaded && visible && win && !win.isDestroyed() && win.isFocused();
+      // Loaded, on screen, holding the keyboard, and having said that its text
+      // is displayed. The last one is the condition that was missing.
+      const usable = loaded && visible && acked && win && !win.isDestroyed() && win.isFocused();
       if (usable) return;
       done({ ok: false });
     }, CONFIRM_READY_DEADLINE_MS);
