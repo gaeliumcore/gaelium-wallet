@@ -41,6 +41,21 @@ body {
   height: 100vh;
   user-select: none;
 }
+/* The chrome does not select, the data does. body carries user-select none so
+   that this feels like an application rather than a page, and every value
+   someone might want to copy opts back in here. Nothing outside the transaction
+   modal has ever been selectable, in any published version, so this is not a
+   regression being undone: the rule simply never had these exceptions. */
+input, textarea,
+.selectable,
+.balance-amount, .balance-pending,
+.receive-address, .receive-label,
+.stat-value, .stat-sub,
+#bottomBlock, #bottomPeers, #bottomHash {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
 .title-bar {
   display: flex; align-items: center; justify-content: space-between;
   height: 38px; padding: 0 12px;
@@ -340,8 +355,12 @@ body {
 .tx-modal-value { color:var(--text-primary); user-select:text; -webkit-user-select:text; font-size:13px; font-family:JetBrains Mono,monospace; text-align:right; max-width:320px; word-break:break-all; }
 .explorer-btn { width:100%; margin-top:18px; padding:12px; background:var(--bg-primary); border:1px solid var(--border); border-radius:10px; color:var(--text-primary); font-family:'Outfit',sans-serif; font-size:14px; font-weight:600; cursor:pointer; transition:all 0.2s; }
 .explorer-btn:hover { border-color:var(--green); background:var(--green-soft); color:var(--green-light); }
-.tx-modal-link { cursor:pointer; text-decoration:underline; text-decoration-style:dotted; text-underline-offset:3px; }
-.tx-modal-link:hover, .tx-modal-link:focus { color:var(--green-light); text-decoration-style:solid; outline:none; }
+/* A value and the action on it are two different things. The value is text to be
+   read and copied, the action is a button. Making the value itself the link is
+   what took away the ability to select an address in the first place. */
+.tx-modal-cell { display:flex; flex-direction:column; align-items:flex-end; gap:4px; max-width:320px; }
+.row-link-btn { background:none; border:none; padding:0; font-family:'Outfit',sans-serif; font-size:11px; color:var(--text-muted); cursor:pointer; text-decoration:underline; text-decoration-style:dotted; text-underline-offset:2px; }
+.row-link-btn:hover, .row-link-btn:focus { color:var(--green-light); text-decoration-style:solid; outline:none; }
 .pagination { display:flex; align-items:center; justify-content:center; gap:6px; margin-top:18px; padding:12px 0; }
 .page-btn {
   min-width:36px; height:36px; border-radius:8px; border:1px solid var(--border);

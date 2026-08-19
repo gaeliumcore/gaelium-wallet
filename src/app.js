@@ -989,7 +989,8 @@ async function exportPrivateKey() {
       // plain text rather than becoming a link that leads nowhere.
       rows+='<div class="tx-modal-row"><span class="tx-modal-label">Address</span>'
         + (hasAddress
-            ? '<span class="tx-modal-value tx-modal-link" role="link" tabindex="0" title="Open on the explorer" data-explorer-address="'+escapeHtml(tx.address)+'">'+escapeHtml(tx.address)+'</span>'
+            ? '<span class="tx-modal-cell"><span class="tx-modal-value">'+escapeHtml(tx.address)+'</span>'
+              + '<button type="button" class="row-link-btn" data-explorer-address="'+escapeHtml(tx.address)+'">Open this address on the explorer</button></span>'
             : '<span class="tx-modal-value">N/A</span>')
         + '</div>';
       rows+='<div class="tx-modal-row"><span class="tx-modal-label">Transaction ID</span><span class="tx-modal-value" style="font-size:11px;">'+escapeHtml(tx.txid)+'</span></div>';
@@ -1149,14 +1150,10 @@ document.addEventListener('click', function(e) {
   const explorerAddr = e.target.closest('[data-explorer-address]');
   if (explorerAddr) openAddressOnExplorer(explorerAddr.dataset.explorerAddress);
 });
-// Keyboard equivalent, since the address row is a link rather than a button.
-document.addEventListener('keydown', function(e) {
-  if (e.key !== 'Enter' && e.key !== ' ') return;
-  const explorerAddr = e.target.closest && e.target.closest('[data-explorer-address]');
-  if (!explorerAddr) return;
-  e.preventDefault();
-  openAddressOnExplorer(explorerAddr.dataset.explorerAddress);
-});
+// The keyboard needs nothing of its own any more. The address action is a real
+// button, which the browser already activates on Enter and on Space. The handler
+// that used to stand in for that would now fire alongside the native click and
+// open two tabs.
 async function openAddressOnExplorer(address) {
   const s = document.getElementById('txExplorerStatus');
   try {
