@@ -1157,7 +1157,45 @@ ipcMain.handle('rpc-importprivkey', async (event, privkey, label, rescan) => {
     return { error: e.message || String(e) };
   }
 });
+// Handing out a private key deserves at least as much ceremony as sending
+// funds, and it happens far less often, so the cost of asking is close to zero.
+// Until now a compromised renderer could read the key of every address in the
+// wallet without a single pixel changing on screen.
+let keyExportInFlight = false;
+
 ipcMain.handle('rpc-dumpprivkey', async (event, address) => {
+  if (typeof address !== 'string' || address.trim().length === 0) {
+    return { error: 'Invalid address' };
+  }
+  if (keyExportInFlight) {
+    return { error: 'A key export is already waiting for confirmation.' };
+  }
+  keyExportInFlight = true;
+  let approved = false;
+  try {
+    const answer = await dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      noLink: true,
+      title: 'Reveal private key',
+      // The address in the message, the plain consequence in the detail, and no
+      // word anyone would have to look up.
+      message: 'Reveal the private key for\n' + address,
+      detail: 'Anyone who has this key can spend everything that address holds, '
+            + 'from any computer, without your wallet and without your passphrase.\n\n'
+            + 'Only continue if you asked for this and you know where the key is going.',
+      buttons: ['Cancel', 'Reveal private key'],
+      defaultId: 0,
+      cancelId: 0
+    });
+    approved = answer.response === 1;
+  } catch (e) {
+    approved = false;
+  } finally {
+    keyExportInFlight = false;
+  }
+  // Nothing is asked of the daemon when the answer is no, so nothing can be
+  // returned to the renderer either.
+  if (!approved) return { cancelled: true };
   try {
     return await rpcCall('dumpprivkey', [address]);
   } catch (e) {

@@ -939,7 +939,10 @@ async function exportPrivateKey() {
   status.textContent='Retrieving private key...';
   try {
     const result = await window.gaelium.dumpPrivKey(addr);
-    if (result && result.error) {
+    if (result && result.cancelled) {
+      status.style.background='var(--bg-primary)'; status.style.color='var(--text-secondary)';
+      status.textContent='Cancelled. No key was revealed.';
+    } else if (result && result.error) {
       status.style.background='var(--red-soft)'; status.style.color='var(--red)';
       if (result.error.includes('not known') || result.error.includes('not found')) {
         status.textContent='Error: This address is not in your wallet.';
