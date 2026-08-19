@@ -58,8 +58,8 @@ Windows 10 or later. macOS and Linux builds follow shortly, from the same code.
 
 ```
 Gaelium Wallet Setup 1.0.2.exe
-cae10c254982ea8bef4b13acb0572793ef129fadc996b850384cc8882d430f40
+2634971d9cc8d2353d45af6ab7bfb0d88681710ab9176121deaac93220d42b91
 
 Gaelium Wallet 1.0.2.exe
-be690f5ae5a86318502dbf5c1bb264df542f057f72fb405773cd54f921e36073
+f170bd46ee3e20ec89e397412c31557e6945be5200b71d82f979623c274ccbc7
 ```
