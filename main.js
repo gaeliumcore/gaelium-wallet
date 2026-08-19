@@ -34,6 +34,32 @@ const MARKET_MIN_INTERVAL_MS = 60000;
 let marketCache = null;        // { prices, fetchedAt }
 let marketLastAttempt = 0;
 
+// Owner only, on both counts. The config carries the RPC password in clear, and
+// anyone who can read it can drive the daemon on the loopback interface:
+// dumpprivkey on every address, or sendtoaddress. The directory is closed as
+// well, which covers everything the daemon puts in it without touching any of
+// its files.
+//
+// On Windows these two are not applied. Node maps chmod to the read only
+// attribute there and cannot express an access control list, so calling it would
+// achieve nothing and could only surprise. The protection on that platform comes
+// from the access control list of the user profile, which already denies other
+// unprivileged accounts.
+const DATADIR_MODE = 0o700;
+const CONF_MODE = 0o600;
+
+// Tightening what gets written does nothing for an installation created before
+// this change, and those are the ones already exposed. This is applied to what
+// is already on disk, every start. Failures are swallowed on purpose: a mode is
+// not meaningful on every filesystem and none of this may stop the wallet.
+function tightenDataDirPermissions() {
+  if (process.platform === 'win32') return;
+  const dataDir = process.platform === 'win32' ? path.join(app.getPath('appData'), 'Gaelium') : path.join(require('os').homedir(), '.gaelium');
+  try { if (fs.existsSync(dataDir)) fs.chmodSync(dataDir, DATADIR_MODE); } catch (e) {}
+  const confPath = path.join(dataDir, 'gaelium.conf');
+  try { if (fs.existsSync(confPath)) fs.chmodSync(confPath, CONF_MODE); } catch (e) {}
+}
+
 // Deliberately not getDataDir, which creates the directory. Reading credentials
 // must not have that side effect.
 function getConfPath() {
@@ -115,7 +141,9 @@ function repairConfCredentials() {
   // line run into the first addition.
   const joiner = (conf.length === 0 || conf.endsWith('\n')) ? '' : eol;
   const tmpPath = confPath + '.tmp';
-  fs.writeFileSync(tmpPath, conf + joiner + additions.join(eol) + eol);
+  // The mode is honoured because this file is new. A rename carries it over to
+  // the target, so the config keeps owner only rights through a repair.
+  fs.writeFileSync(tmpPath, conf + joiner + additions.join(eol) + eol, { mode: CONF_MODE });
   fs.renameSync(tmpPath, confPath);
 }
 let RPC_PASS = null;
@@ -137,7 +165,7 @@ function getDaemonPath() {
 function getDataDir() {
   const dataDir = process.platform === 'win32' ? path.join(app.getPath('appData'), 'Gaelium') : path.join(require('os').homedir(), '.gaelium');
   if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
+    fs.mkdirSync(dataDir, { recursive: true, mode: DATADIR_MODE });
   }
   return dataDir;
 }
@@ -146,6 +174,10 @@ function getDataDir() {
 function ensureConfig() {
   const dataDir = getDataDir();
   const confPath = path.join(dataDir, 'gaelium.conf');
+  // Before anything reads or writes, and before the daemon is started a few
+  // lines further on, so an installation made by an earlier version is closed
+  // at the first launch that carries this.
+  tightenDataDirPermissions();
   
   if (!fs.existsSync(confPath)) {
     if (!RPC_USER) RPC_USER = getRpcUser();
@@ -158,7 +190,7 @@ addnode=seed1.gaelium.io
 addnode=seed2.gaelium.io
 addnode=seed3.gaelium.io
 `;
-    fs.writeFileSync(confPath, config);
+    fs.writeFileSync(confPath, config, { mode: CONF_MODE });
   } else {
     // Repaired before the values are read, so the wallet picks up whatever was
     // just added, and before the daemon is started a few lines further on, so
