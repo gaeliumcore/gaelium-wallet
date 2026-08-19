@@ -23,11 +23,11 @@ Built with Electron, supports Windows, Linux and macOS.
 
 Latest release: [v1.0.2](https://github.com/gaeliumcore/gaelium-wallet/releases/tag/v1.0.2)
 
-| Platform | File |
+| Platform | Current file |
 |----------|------|
 | Windows | Gaelium Wallet Setup 1.0.2.exe (installer) |
 | Windows | Gaelium Wallet 1.0.2.exe (portable) |
-| Linux | GaeliumWallet-1.0.1.AppImage |
+| Linux | Gaelium Wallet-1.0.1.AppImage |
 | Linux | gaelium-wallet_1.0.1_amd64.deb |
 | Linux | gaelium-wallet-1.0.1.x86_64.rpm |
 | macOS | Gaelium Wallet-1.0.1.dmg |
