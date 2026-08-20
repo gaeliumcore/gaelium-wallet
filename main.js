@@ -43,6 +43,38 @@ const { spawn, execFileSync } = require('child_process');
 // Capture exec path at startup before env can be tampered with
 const SELF_EXEC_PATH = process.env.PORTABLE_EXECUTABLE_FILE || process.env.APPIMAGE || process.execPath;
 
+// Start this application again, then let the caller exit.
+//
+// On Windows and on Linux the path above is the application: a portable exe,
+// an AppImage, or the executable itself. Spawning it starts the application.
+//
+// On macOS it is not. process.execPath there points inside the bundle, at
+// Contents/MacOS, and a process started from that path is not registered as
+// this application: it gets a second Dock entry of its own and the system
+// never associates it with the bundle. That is what put two icons in the Dock
+// after a wallet restore. The bundle is asked to open instead, through the
+// system launcher, which is the only way to get an instance the system knows.
+//
+// The new instance is requested explicitly as a new one because this one is
+// still running for another second and a half; without that, the launcher
+// would bring the current instance back to the front and start nothing, and
+// the wallet would never come back after this process exits.
+function relaunchSelf(args) {
+  const { spawn: spawnProc } = require('child_process');
+  let command = SELF_EXEC_PATH;
+  let commandArgs = args;
+  if (process.platform === 'darwin') {
+    const bundlePath = path.resolve(process.execPath, '..', '..', '..');
+    if (bundlePath.endsWith('.app')) {
+      command = '/usr/bin/open';
+      commandArgs = ['-n', '-a', bundlePath, '--args'].concat(args);
+    }
+  }
+  // Detached so it survives our exit.
+  const child = spawnProc(command, commandArgs, { detached: true, stdio: 'ignore' });
+  child.unref();
+}
+
 // RPC Config
 const RPC_PORT = 18080;
 // The name every installation used before it was generated. Kept because a
@@ -1261,15 +1293,8 @@ ipcMain.handle('rpc-encryptwallet', async (event, passphrase) => {
     });
     daemonProcess = null;
   }
-  // Relaunch: use original portable exe if available
-  const execPath = SELF_EXEC_PATH;
-  const { spawn: spawnProc } = require('child_process');
-  // Spawn detached so it survives our exit
-  const child = spawnProc(execPath, ['--navigate=security'], {
-    detached: true,
-    stdio: 'ignore'
-  });
-  child.unref();
+  // Relaunch through the launcher, so the new instance is the application.
+  relaunchSelf(['--navigate=security']);
   // Give the new process time to start extracting before we exit
   await new Promise(r => setTimeout(r, 1500));
   app.exit(0);
@@ -1473,14 +1498,8 @@ ipcMain.handle('restore-wallet', async () => {
       });
     }
     daemonProcess = null;
-    // Relaunch: same method as encrypt (spawn + exit)
-    const execPath = SELF_EXEC_PATH;
-    const { spawn: spawnProc } = require('child_process');
-    const child = spawnProc(execPath, ['--navigate=security'], {
-      detached: true,
-      stdio: 'ignore'
-    });
-    child.unref();
+    // Relaunch: same method as encrypt.
+    relaunchSelf(['--navigate=security']);
     await new Promise(r => setTimeout(r, 1500));
     app.exit(0);
     return { success: true };
