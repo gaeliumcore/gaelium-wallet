@@ -2,11 +2,10 @@
 node_modules/
 dist/
 
-# Daemon binaries (publies via gaelium.io, pas via GitHub)
-daemon/gaeliumd
-daemon/gaeliumd.exe
-daemon/gaelium-cli
-daemon/gaelium-cli.exe
+# Daemon binaries. They are published as release assets and are named here
+# after the asset they came from, so the file name states which build ships.
+daemon/gaeliumd-*
+daemon/gaelium-cli-*
 daemon-linux/
 
 # Backups locaux
