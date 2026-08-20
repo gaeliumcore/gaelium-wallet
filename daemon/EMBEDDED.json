@@ -1,0 +1,34 @@
+{
+  "comment": [
+    "Machine readable record of the daemon binary each target embeds.",
+    "The build fails if the packaged binary does not match this file.",
+    "Any change here must be mirrored in EMBEDDED.md in the same change."
+  ],
+  "targets": {
+    "darwin": {
+      "source": "daemon/gaeliumd-mac-1.0.1",
+      "packagedPath": "daemon/gaeliumd",
+      "releaseAsset": "gaeliumd-mac-1.0.1",
+      "format": "mach-o-x86-64",
+      "size": 15325104,
+      "sha256": "c71c7a49aa3556fb5addfb96f23eeb2afd9cf3d9f2a244942f9a8766d75652be",
+      "minimumSystemVersion": "14.0"
+    },
+    "win32": {
+      "source": "daemon/gaeliumd-1.0.1.exe",
+      "packagedPath": "daemon/gaeliumd.exe",
+      "releaseAsset": "gaeliumd-1.0.1.exe",
+      "format": "pe",
+      "size": 13563904,
+      "sha256": "82f044f5ab9673a47fdd24ecda7a5abccb2a70599efa35f8e0045d5897cf26da"
+    },
+    "linux": {
+      "source": "daemon/gaeliumd-linux-1.0.0",
+      "packagedPath": "daemon/gaeliumd",
+      "releaseAsset": "gaeliumd-linux-1.0.0",
+      "format": "elf",
+      "size": 14844248,
+      "sha256": "21abecb89c91191d8941cd8465214ae8a3ac0f21ed94fac808c6bdec1333e098"
+    }
+  }
+}
