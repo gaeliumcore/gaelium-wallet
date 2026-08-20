@@ -531,7 +531,13 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', async () => {
   await stopDaemon();
-  if (process.platform !== 'darwin') app.quit();
+  // No platform is excepted here. macOS convention keeps an application alive
+  // with no window, but that convention needs an activate handler to bring the
+  // window back, and this application has none: the process stayed running,
+  // invisible, and the system routed every further launch to it, so the wallet
+  // could not be reopened at all. Quitting on all three platforms is the same
+  // behaviour everywhere and leaves nothing behind.
+  app.quit();
 });
 
 app.on('before-quit', async (event) => {
