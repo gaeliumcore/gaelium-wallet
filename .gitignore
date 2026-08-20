@@ -6,7 +6,6 @@ dist/
 # after the asset they came from, so the file name states which build ships.
 daemon/gaeliumd-*
 daemon/gaelium-cli-*
-daemon-linux/
 
 # Backups locaux
 *.bak.*
