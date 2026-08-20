@@ -7,6 +7,7 @@
     "start": "electron .",
     "build-win": "electron-builder --win",
     "build-linux": "electron-builder --linux",
+    "build-mac": "electron-builder --mac",
     "build-all": "electron-builder --win --linux"
   },
   "author": {
@@ -20,6 +21,7 @@
     "directories": {
       "output": "dist"
     },
+    "afterPack": "build/verify-embedded-daemon.js",
     "win": {
       "target": [
         "portable",
@@ -27,7 +29,7 @@
       ],
       "icon": "src/assets/icon.ico",
       "extraResources": [
-        { "from": "daemon/gaeliumd.exe", "to": "daemon/gaeliumd.exe" }
+        { "from": "daemon/gaeliumd-1.0.1.exe", "to": "daemon/gaeliumd.exe" }
       ]
     },
     "files": [
@@ -41,15 +43,17 @@
       "icon": "src/assets/icon.png",
       "category": "Finance",
       "extraResources": [
-        { "from": "daemon/gaeliumd", "to": "daemon/gaeliumd" }
+        { "from": "daemon/gaeliumd-linux-1.0.0", "to": "daemon/gaeliumd" }
       ]
     },
     "mac": {
       "target": ["dmg", "zip"],
-      "icon": "src/assets/icon.icns",
+      "icon": "build/icon.icns",
       "category": "public.app-category.finance",
+      "minimumSystemVersion": "14.0",
+      "identity": null,
       "extraResources": [
-        { "from": "daemon/gaeliumd", "to": "daemon/gaeliumd" }
+        { "from": "daemon/gaeliumd-mac-1.0.1", "to": "daemon/gaeliumd" }
       ]
     },
     "nsis": {
