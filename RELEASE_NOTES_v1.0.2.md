@@ -52,7 +52,8 @@ rebuilt.
 
 ## Requirements
 
-Windows 10 or later. macOS and Linux builds follow shortly, from the same code.
+Windows 10 or later, or macOS 14 or later. The macOS floor is set by the
+embedded daemon, which requires that version. The Linux build follows shortly.
 
 ## Verifying your download
 
@@ -62,4 +63,10 @@ Gaelium Wallet Setup 1.0.2.exe
 
 Gaelium Wallet 1.0.2.exe
 f170bd46ee3e20ec89e397412c31557e6945be5200b71d82f979623c274ccbc7
+
+Gaelium Wallet-1.0.2.dmg
+b6e7a736491f00edcaddc45f8bc75c6d1082c72f4bfe9ff0c47126c12ce68798
+
+Gaelium Wallet-1.0.2-mac.zip
+29305d744efe6760e5debbdfcbe2e755021a376bbf1ced057cfc174e7ef8ee80
 ```
