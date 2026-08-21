@@ -43,7 +43,7 @@
       "icon": "src/assets/icon.png",
       "category": "Finance",
       "extraResources": [
-        { "from": "daemon/gaeliumd-linux-1.0.0", "to": "daemon/gaeliumd" }
+        { "from": "daemon/gaeliumd-linux-1.0.1", "to": "daemon/gaeliumd" }
       ]
     },
     "mac": {

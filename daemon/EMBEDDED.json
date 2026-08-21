@@ -23,12 +23,12 @@
       "sha256": "82f044f5ab9673a47fdd24ecda7a5abccb2a70599efa35f8e0045d5897cf26da"
     },
     "linux": {
-      "source": "daemon/gaeliumd-linux-1.0.0",
+      "source": "daemon/gaeliumd-linux-1.0.1",
       "packagedPath": "daemon/gaeliumd",
-      "releaseAsset": "gaeliumd-linux-1.0.0",
+      "releaseAsset": "gaeliumd-linux-1.0.1",
       "format": "elf",
-      "size": 14844248,
-      "sha256": "21abecb89c91191d8941cd8465214ae8a3ac0f21ed94fac808c6bdec1333e098"
+      "size": 18057944,
+      "sha256": "01f5fa48fd39f13d3ad307c8818503c65a939040e95e7259b09039f295ffe010"
     }
   }
 }
