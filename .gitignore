@@ -4,8 +4,13 @@ dist/
 
 # Daemon binaries. They are published as release assets and are named here
 # after the asset they came from, so the file name states which build ships.
-daemon/gaeliumd-*
-daemon/gaelium-cli-*
+# The unversioned names are covered as well: daemon/gaeliumd is the name the
+# packer writes inside the application, so a copy left under that name in the
+# source tree must never reach a commit. The same holds for a directory used
+# to hold a binary aside while building for another platform.
+daemon/gaeliumd*
+daemon/gaelium-cli*
+daemon-*/
 
 # Backups locaux
 *.bak.*
@@ -16,9 +21,11 @@ daemon/gaelium-cli-*
 .DS_Store
 Thumbs.db
 
-# Editor
+# Editor and local tool state. A file whose name ends in .local.json holds
+# settings that belong to one working copy and not to the project.
 .vscode/
 .idea/
+*.local.json
 *.swp
 
 # Local development notes
