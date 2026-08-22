@@ -27,9 +27,9 @@ Latest release: [v1.0.2](https://github.com/gaeliumcore/gaelium-wallet/releases/
 |----------|------|
 | Windows | Gaelium Wallet Setup 1.0.2.exe (installer) |
 | Windows | Gaelium Wallet 1.0.2.exe (portable) |
-| Linux | Gaelium Wallet-1.0.1.AppImage |
-| Linux | gaelium-wallet_1.0.1_amd64.deb |
-| Linux | gaelium-wallet-1.0.1.x86_64.rpm |
+| Linux | Gaelium Wallet-1.0.2.AppImage |
+| Linux | gaelium-wallet_1.0.2_amd64.deb |
+| Linux | gaelium-wallet-1.0.2.x86_64.rpm |
 | macOS | Gaelium Wallet-1.0.2.dmg |
 | macOS | Gaelium Wallet-1.0.2-mac.zip |
 

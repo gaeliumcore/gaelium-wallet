@@ -50,10 +50,34 @@ rebuilt.
 - Addresses, transaction ids and amounts can be selected with the cursor and
   copied again.
 
+## Linux
+
+The Linux wallet is available in three formats, and all three embed the same
+Gaelium Core daemon v1.0.1. That embedded daemon is byte for byte the
+gaeliumd-linux-1.0.1 binary published on gaelium.io, so anyone can check it
+against the public checksum.
+
+- AppImage: a single file that runs on most distributions with no
+  installation. After downloading it, make it executable before launching
+  it, either through your file manager file properties or by running
+  chmod +x on the file. Without this step a double click opens the file in a
+  text editor, and the file looks broken when it is not.
+- Debian and Ubuntu: the .deb package, installed with your usual package
+  tool.
+- Fedora and other RPM based distributions: the .rpm package.
+
+Installing over version 1.0.1 keeps your wallet, addresses and settings.
+
+Uninstalling the wallet does not delete your wallet. Your keys, addresses
+and blockchain data stay in the data folder in your home directory,
+~/.gaelium, on purpose, so that removing or reinstalling the application
+never puts your funds at risk. If you also want to erase that data, you have
+to delete that folder yourself.
+
 ## Requirements
 
-Windows 10 or later, or macOS 14 or later. The macOS floor is set by the
-embedded daemon, which requires that version. The Linux build follows shortly.
+Windows 10 or later, macOS 14 or later, or a 64-bit Linux desktop. On macOS
+the floor is set by the embedded daemon, which requires that version.
 
 ## Verifying your download
 
@@ -69,4 +93,13 @@ b6e7a736491f00edcaddc45f8bc75c6d1082c72f4bfe9ff0c47126c12ce68798
 
 Gaelium Wallet-1.0.2-mac.zip
 29305d744efe6760e5debbdfcbe2e755021a376bbf1ced057cfc174e7ef8ee80
+
+Gaelium Wallet-1.0.2.AppImage
+b87474b25cfd3ee6fc188fb029cc4d4926cb3e6195d13acf926dbc8df0a49f40
+
+gaelium-wallet_1.0.2_amd64.deb
+04a23a5d38f6d94fef3103d84c4923b503abfb83defce939904723f683802409
+
+gaelium-wallet-1.0.2.x86_64.rpm
+170d9bf82c05919afbb20755bb76430f9e4c687aac32978c29120ab70fb2d1fb
 ```
